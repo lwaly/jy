@@ -1264,4 +1264,4 @@ bool CmdExecSql::CheckColName(const std::string& strColName)
 }
 
 
-} /* namespace oss */
+} /* namespace neb */
