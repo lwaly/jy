@@ -30,7 +30,7 @@ extern "C" {
 }
 #endif
 
-namespace neb {
+namespace DataProxy {
 
     const int gc_iErrBuffSize = 256;
 
@@ -47,23 +47,23 @@ namespace neb {
     protected:
         bool ReadDataProxyConf();
         bool ReadTableRelation();
-         bool Preprocess(neb::Mydis& oMemOperate);
-         bool CheckRequest(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
-         bool CheckRedisOperate(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate);
-         bool CheckDbOperate(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::DbOperate& oDbOperate);
- 
-         bool CheckDataSet(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
-         bool CheckJoinField(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
-         bool PrepareForWriteBothWithDataset(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
-         bool PrepareForWriteBothWithFieldJoin(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
+        bool Preprocess(neb::Mydis& oMemOperate);
+        bool CheckRequest(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
+        bool CheckRedisOperate(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate);
+        bool CheckDbOperate(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::DbOperate& oDbOperate);
 
-         bool RedisOnly(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
-         bool DbOnly(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
-         bool ReadEither(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
-         bool WriteBoth(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate);
-         bool UpdateBothWithDataset(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate);
+        bool CheckDataSet(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
+        bool CheckJoinField(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
+        bool PrepareForWriteBothWithDataset(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
+        bool PrepareForWriteBothWithFieldJoin(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate, const std::string& strRedisDataPurpose);
 
-         void Response(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, int iErrno, const std::string& strErrMsg);
+        bool RedisOnly(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
+        bool DbOnly(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
+        bool ReadEither(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate);
+        bool WriteBoth(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate);
+        bool UpdateBothWithDataset(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate);
+
+        void Response(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, int iErrno, const std::string& strErrMsg);
 
     private:
         bool GetNodeSession(int32 iDataType, int32 iSectionFactorType, uint32 uiFactor);
@@ -76,10 +76,10 @@ namespace neb {
         std::map<std::string, std::set<std::string> > m_mapTableFields; //表的组成字段，key为表名，value为字段名集合，用于查找请求的字段名是否存在
 
     public:
-        std::shared_ptr<StepSendToDbAgent> pStepSendToDbAgent;
-        std::shared_ptr<StepReadFromRedis> pStepReadFromRedis;
-        std::shared_ptr<StepWriteToRedis> pStepWriteToRedis;
-        std::shared_ptr<StepReadFromRedisForWrite> pStepReadFromRedisForWrite;
+        std::shared_ptr<StepSendToDbAgent> m_pStepSendToDbAgent;
+        std::shared_ptr<StepReadFromRedis> m_pStepReadFromRedis;
+        std::shared_ptr<StepWriteToRedis> m_pStepWriteToRedis;
+        std::shared_ptr<StepReadFromRedisForWrite> m_pStepReadFromRedisForWrite;
     };
 
 } /* namespace neb */

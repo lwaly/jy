@@ -9,7 +9,7 @@
 ******************************************************************************/
 #include "StepWriteBackToRedis.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     StepWriteBackToRedis::StepWriteBackToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead,
         const neb::Mydis& oMemOperate, std::shared_ptr<SessionRedisNode> pNodeSession, int iRelative, const std::string& strKeyField, const neb::CJsonObject* pJoinField)
@@ -22,7 +22,7 @@ namespace neb {
     {
     }
 
-    E_CMD_STATUS StepWriteBackToRedis::Emit(const neb::Result& oRsp)
+    neb::E_CMD_STATUS StepWriteBackToRedis::Emit(const neb::Result& oRsp)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!m_pNodeSession)
@@ -42,7 +42,7 @@ namespace neb {
         }
         if (!bGetRedisNode)
         {
-            LOG4_ERROR("%d: redis node not found!", ERR_REDIS_NODE_NOT_FOUND);
+            LOG4_ERROR("%d: redis node not found!", neb::ERR_REDIS_NODE_NOT_FOUND);
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -57,7 +57,7 @@ namespace neb {
         }
         else if (RELATIVE_DATASET == m_iRelative)
         {
-            if (neb::REDIS_T_HASH == m_oMemOperate.redis_operate().redis_structure())
+            if (REDIS_T_HASH == m_oMemOperate.redis_operate().redis_structure())
             {
                 if (!MakeCmdForHashWithDataSet(oRsp))
                 {
@@ -74,7 +74,7 @@ namespace neb {
         }
         else 
         {
-            if (neb::REDIS_T_HASH == m_oMemOperate.redis_operate().redis_structure())
+            if (REDIS_T_HASH == m_oMemOperate.redis_operate().redis_structure())
             {
                 if (!MakeCmdForHashWithoutDataSet(oRsp))
                 {
@@ -98,7 +98,7 @@ namespace neb {
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepWriteBackToRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
+    neb::E_CMD_STATUS StepWriteBackToRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (REDIS_OK != status)
@@ -125,13 +125,13 @@ namespace neb {
         // 设置过期时间
         if (m_oMemOperate.redis_operate().key_ttl() != 0)
         {
-            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("dataproxy::StepSetTtl", m_strMasterNode,
+            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("DataProxy::StepSetTtl", m_strMasterNode,
                 m_oMemOperate.redis_operate().key_name(), m_oMemOperate.redis_operate().key_ttl()));
         }
         else
         {
             // 未设置过期时间的读取操作，从DB中读取回写redis只保留3天
-            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("dataproxy::StepSetTtl", m_strMasterNode,
+            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("DataProxy::StepSetTtl", m_strMasterNode,
                 m_oMemOperate.redis_operate().key_name(), 259200));
         }
         if (NULL == pStepSetTtl)
@@ -140,7 +140,7 @@ namespace neb {
             return (neb::CMD_STATUS_FAULT);
         }
 
-        pStepSetTtl->Emit(ERR_OK);
+        pStepSetTtl->Emit(neb::ERR_OK);
         return (neb::CMD_STATUS_COMPLETED);
     }
 
@@ -217,7 +217,7 @@ namespace neb {
                 {
                     if (oRsp.record_data(rec).field_info(col).col_value().size() == 0)
                     {
-                        LOG4_ERROR("error %d: %s", ERR_KEY_FIELD_VALUE, "the value of key field \"%s\" can not be empty, and record: %s!",
+                        LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD_VALUE, "the value of key field \"%s\" can not be empty, and record: %s!",
                             m_strKeyField.c_str(), oRsp.record_data(rec).DebugString().c_str());
 
                         strKeyFieldValue.clear();
@@ -230,7 +230,7 @@ namespace neb {
                 {
                     if (oRsp.record_data(rec).field_info(col).col_value().size() == 0)
                     {
-                        LOG4_ERROR("error %d: %s", ERR_KEY_FIELD_VALUE, "the value of join field can not be empty, and record: %s!",
+                        LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD_VALUE, "the value of join field can not be empty, and record: %s!",
                             m_strKeyField.c_str(), oRsp.record_data(rec).DebugString().c_str());
 
                         strKeyFieldValue.clear();

@@ -17,7 +17,8 @@ endif
 LIB3RD_PATH = ../../../thirdlib
 INTERFACE_PATH = ../../..
 DST_PATH = ../../../release
-VPATH = $(INTERFACE_PATH)/src
+
+VPATH = ../src
 SUB_DIRS := $(foreach dir, $(VPATH), $(shell find $(dir) -maxdepth 5 -type d))
 DIRS := $(SUB_DIRS)
 

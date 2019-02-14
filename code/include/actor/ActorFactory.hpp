@@ -35,10 +35,14 @@ public:
 
     bool Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc);
     Actor* Create(const std::string& strTypeName, Targs&&... args);
-
+    void Print(std::string& strRes)
+    {
+        strRes = m_strRes;
+    }
 private:
     ActorFactory(){};
     static ActorFactory<Targs...>* m_pActorFactory;
+    static string m_strRes;
     std::unordered_map<std::string, std::function<Actor*(Targs&&...)> > m_mapCreateFunction;
 };
 
@@ -49,10 +53,13 @@ ActorFactory<Targs...>* ActorFactory<Targs...>::m_pActorFactory = nullptr;
 template<typename ...Targs>
 bool ActorFactory<Targs...>::Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc)
 {
+    m_strRes += strTypeName + "  ";
     if (nullptr == pFunc)
     {
         return (false);
     }
+
+    m_strRes += strTypeName + "  ";
     bool bReg = m_mapCreateFunction.insert(
                     std::make_pair(strTypeName, pFunc)).second;
     return (bReg);

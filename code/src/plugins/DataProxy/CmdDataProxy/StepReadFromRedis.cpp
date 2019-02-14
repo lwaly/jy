@@ -10,10 +10,10 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include "StepReadFromRedis.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     StepReadFromRedis::StepReadFromRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate,
-        SessionRedisNode* pNodeSession, bool bIsDataSet, const neb::CJsonObject* pTableFields, const std::string& strKeyField, Step* pNextStep)
+        std::shared_ptr<SessionRedisNode> pNodeSession, bool bIsDataSet, const neb::CJsonObject* pTableFields, const std::string& strKeyField, std::shared_ptr<neb::Step> pNextStep)
         : m_pChannel(pChannel), m_oReqMsgHead(oInMsgHead), m_oRedisOperate(oRedisOperate), m_bIsDataSet(bIsDataSet), m_oTableFields(pTableFields),
         m_strKeyField(strKeyField), m_iReadNum(0), m_iTableFieldNum(0), m_pNodeSession(pNodeSession), m_pNextStep(pNextStep)
     {
@@ -22,14 +22,9 @@ namespace neb {
 
     StepReadFromRedis::~StepReadFromRedis()
     {
-        if (m_pNextStep /*&& (0 == m_pNextStep->GetSequence())*/)
-        {
-            delete m_pNextStep;
-            m_pNextStep = NULL;
-        }
     }
 
-    E_CMD_STATUS StepReadFromRedis::Emit(int iErrno, const std::string& strErrMsg, const std::string& strErrShow)
+    neb::E_CMD_STATUS StepReadFromRedis::Emit(int iErrno, const std::string& strErrMsg, void* data)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!m_pNodeSession)
@@ -50,7 +45,7 @@ namespace neb {
             }
             if (!bGetRedisNode)
             {
-                Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
                 return (neb::CMD_STATUS_FAULT);
             }
         }
@@ -85,13 +80,13 @@ namespace neb {
                 return (neb::CMD_STATUS_RUNNING);
             }
         }
-        Response(m_pChannel, m_oReqMsgHead, ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
+        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
         LOG4_ERROR("RegisterCallback(%s, StepWriteToRedis) error!", m_strMasterNode.c_str());
 
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepReadFromRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
+    neb::E_CMD_STATUS StepReadFromRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         char szErrMsg[256] = {0};
@@ -100,10 +95,10 @@ namespace neb {
             if (0 == m_iReadNum)
             {
                 LOG4_WARNING("redis %s cmd status %d!", m_strSlaveNode.c_str(), status);
-                return (Emit(ERR_OK));
+                return (Emit(neb::ERR_OK));
             }
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s cmd status %d!", m_strMasterNode.c_str(), status);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         if (NULL == pReply)
@@ -111,17 +106,17 @@ namespace neb {
             if (0 == m_iReadNum)
             {
                 LOG4_WARNING("redis %s error %d: %s!", m_strSlaveNode.c_str(), c->err, c->errstr);
-                return (Emit(ERR_OK));
+                return (Emit(neb::ERR_OK));
             }
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strMasterNode.c_str(), c->err, c->errstr);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         LOG4_TRACE("redis reply->type = %d", pReply->type);
         if (REDIS_REPLY_ERROR == pReply->type)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strSlaveNode.c_str(), pReply->type, pReply->str);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         if (REDIS_REPLY_NIL == pReply->type)
@@ -130,21 +125,21 @@ namespace neb {
             {  // redis中数据为空，有下一步（通常是再尝试从DB中读）则执行下一步
                 if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                 {
-                    Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                     return (neb::CMD_STATUS_FAULT);
                 }
                 return (neb::CMD_STATUS_COMPLETED);
             }
             else
             {            // 只读redis，redis的结果又为空
-                Response(m_pChannel, m_oReqMsgHead, ERR_OK, "OK");        // 操作是正常的，但结果集为空
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_OK, "OK");        // 操作是正常的，但结果集为空
                 return (neb::CMD_STATUS_COMPLETED);
             }
         }
 
         // 从redis中读到数据
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         if (REDIS_REPLY_STRING == pReply->type)
@@ -158,12 +153,12 @@ namespace neb {
                     {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                         if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                         {
-                            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                             return (neb::CMD_STATUS_FAULT);
                         }
                         return (neb::CMD_STATUS_COMPLETED);
                     }
-                    Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "pRecord->ParseFromArray(pReply->element[i]->str, pReply->element[i]->len) failed!");
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "pRecord->ParseFromArray(pReply->element[i]->str, pReply->element[i]->len) failed!");
                     return (neb::CMD_STATUS_FAULT);
                 }
                 if (m_iTableFieldNum > 0 && m_iTableFieldNum != pRecord->field_info_size())
@@ -172,12 +167,12 @@ namespace neb {
                     {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                         if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                         {
-                            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                             return (neb::CMD_STATUS_FAULT);
                         }
                         return (neb::CMD_STATUS_COMPLETED);
                     }
-                    Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "the field of redis dataset record not match the db table field num!");
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "the field of redis dataset record not match the db table field num!");
                     return (neb::CMD_STATUS_FAULT);
                 }
             }
@@ -205,18 +200,18 @@ namespace neb {
                 {  // redis中数据为空，有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (neb::CMD_STATUS_FAULT);
                     }
                     return (neb::CMD_STATUS_COMPLETED);
                 }
                 else
                 {            // 只读redis，redis的结果又为空
-                    Response(m_pChannel, m_oReqMsgHead, ERR_OK, "OK");        // 操作是正常的，但结果集为空
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_OK, "OK");        // 操作是正常的，但结果集为空
                     return (neb::CMD_STATUS_COMPLETED);
                 }
             }
-            if (neb::REDIS_T_HASH == m_oRedisOperate.redis_structure())
+            if (REDIS_T_HASH == m_oRedisOperate.redis_structure())
             {
                 if (ReadReplyHash(pReply))
                 {
@@ -236,7 +231,7 @@ namespace neb {
         else
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d: %s!", pReply->type, pReply->str);
-            Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -273,7 +268,7 @@ namespace neb {
         LOG4_TRACE("%s()", __FUNCTION__);
         char szErrMsg[256] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         oRsp.set_total_count(pReply->elements);
@@ -284,7 +279,7 @@ namespace neb {
         {
             if (pReply->element[i]->len > 1000000)
             { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
                 return (false);
             }
             if (iDataLen + pReply->element[i]->len > 1000000)
@@ -312,12 +307,12 @@ namespace neb {
                     {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                         if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                         {
-                            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                             return (false);
                         }
                         return (true);
                     }
-                    Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "pRecord->ParseFromArray(pReply->element[i]->str, pReply->element[i]->len) failed!");
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "pRecord->ParseFromArray(pReply->element[i]->str, pReply->element[i]->len) failed!");
                     return (false);
                 }
                 if (m_iTableFieldNum > 0 && m_iTableFieldNum != pRecord->field_info_size())
@@ -326,12 +321,12 @@ namespace neb {
                     {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                         if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                         {
-                            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                             return (false);
                         }
                         return (true);
                     }
-                    Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "the field of redis dataset record not match the db table field num!");
+                    Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "the field of redis dataset record not match the db table field num!");
                     return (false);
                 }
                 iDataLen += pReply->element[i]->len;
@@ -342,7 +337,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -353,7 +348,7 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!"
                     , pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
         }
@@ -372,7 +367,7 @@ namespace neb {
         char szErrMsg[256] = {0};
         char szValue[32] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         oRsp.set_total_count(pReply->elements);
@@ -382,7 +377,7 @@ namespace neb {
         {
             if (pReply->element[i]->len > 1000000)
             { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
                 return (false);
             }
             if (iDataLen + pReply->element[i]->len > 1000000)
@@ -417,7 +412,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -433,7 +428,7 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!"
                     , pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
         }
@@ -501,7 +496,7 @@ namespace neb {
         char szErrMsg[256] = {0};
         char szValue[32] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         oRsp.set_total_count(1);
@@ -528,7 +523,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -544,13 +539,13 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!"
                     , pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
 
             if (iDataLen > 1000000)
             { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hash result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hash result set exceed 1 MB!");
                 return (false);
             }
         }
@@ -568,7 +563,7 @@ namespace neb {
         LOG4_TRACE("%s()", __FUNCTION__);
         char szErrMsg[256] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         int iDataLen = oRsp.ByteSize();
@@ -576,7 +571,7 @@ namespace neb {
         if ((pReply->elements % 2) != 0)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d elements num %u not a even number for hgetall!", pReply->type, pReply->elements);
-            Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -587,7 +582,7 @@ namespace neb {
         {
             if (pReply->element[i]->len > 1000000)
             { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
                 return (false);
             }
             if (iDataLen + pReply->element[i]->len > 1000000)
@@ -616,7 +611,7 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!"
                     , pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
             if (REDIS_REPLY_STRING == pReply->element[j]->type)
@@ -630,7 +625,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -641,7 +636,7 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", j, pReply->element[j]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!"
                     , pReply->type, j, pReply->element[j]->type, pReply->element[j]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
         }
@@ -660,7 +655,7 @@ namespace neb {
         char szErrMsg[256] = {0};
         char szValue[32] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         int iDataLen = oRsp.ByteSize();
@@ -668,7 +663,7 @@ namespace neb {
         if ((pReply->elements % 2) != 0)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d elements num %u not a even number for hgetall!", pReply->type, pReply->elements);
-            Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -688,7 +683,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -699,7 +694,7 @@ namespace neb {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!",
                     pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
 
@@ -720,7 +715,7 @@ namespace neb {
                 {  // redis中hash的某个Field数据为空（说明数据不完整），有下一步（通常是再尝试从DB中读）则执行下一步
                     if (neb::CMD_STATUS_FAULT == m_pNextStep->Emit())
                     {
-                        Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
+                        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "redis result set is nil and send to dbagent failed!");
                         return (false);
                     }
                     return (true);
@@ -735,13 +730,13 @@ namespace neb {
             {
                 LOG4_ERROR("pReply->element[%d]->type = %d", j, pReply->element[j]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!", pReply->type, j, pReply->element[j]->type, pReply->element[j]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
 
             if (iDataLen > 1000000)
             { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
                 return (false);
             }
         }

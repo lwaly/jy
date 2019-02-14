@@ -9,19 +9,19 @@
 ******************************************************************************/
 #include "StepReadFromRedisForWrite.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     StepReadFromRedisForWrite::StepReadFromRedisForWrite(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate,
-        SessionRedisNode* pNodeSession, const neb::CJsonObject& oTableFields, const std::string& strKeyField)
+        std::shared_ptr<SessionRedisNode> pNodeSession, const neb::CJsonObject& oTableFields, const std::string& strKeyField)
         : m_pChannel(pChannel), m_oReqMsgHead(oInMsgHead), m_oMemOperate(oMemOperate), m_oTableFields(oTableFields), m_strKeyField(strKeyField),
-        m_pRedisNodeSession(pNodeSession), pStepSendToDbAgent(NULL), pStepWriteToRedis(NULL)
+        m_pRedisNodeSession(pNodeSession), pStepSendToDbAgent(nullptr), pStepWriteToRedis(nullptr)
     {
     }
 
     StepReadFromRedisForWrite::~StepReadFromRedisForWrite() {
     }
 
-    E_CMD_STATUS StepReadFromRedisForWrite::Emit(int iErrno, const std::string& strErrMsg, const std::string& strErrShow)
+    neb::E_CMD_STATUS StepReadFromRedisForWrite::Emit(int iErrno, const std::string& strErrMsg, void* data)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!m_pRedisNodeSession) {
@@ -39,7 +39,7 @@ namespace neb {
         }
         if (!bGetRedisNode)
         {
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -49,11 +49,11 @@ namespace neb {
         {
             if (m_oMemOperate.redis_operate().fields(i).col_name().size() > 0)
             {
-                    Append(m_oMemOperate.redis_operate().fields(i).col_name());
+                Append(m_oMemOperate.redis_operate().fields(i).col_name());
             }
             if (m_oMemOperate.redis_operate().fields(i).col_value().size() > 0)
             {
-                    Append(m_oMemOperate.redis_operate().fields(i).col_value());
+                Append(m_oMemOperate.redis_operate().fields(i).col_value());
             }
         }
 
@@ -61,34 +61,34 @@ namespace neb {
         {
             return (neb::CMD_STATUS_RUNNING);
         }
-        Response(m_pChannel, m_oReqMsgHead, ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
+        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
         LOG4_ERROR("RegisterCallback(%s, StepReadFromRedisForWrite) error!", m_strMasterNode.c_str());
 
-        Response(m_pChannel, m_oReqMsgHead, ERR_NEW, "malloc space for loss::RedisCmd error!");
+        Response(m_pChannel, m_oReqMsgHead, neb::ERR_NEW, "malloc space for loss::RedisCmd error!");
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepReadFromRedisForWrite::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
+    neb::E_CMD_STATUS StepReadFromRedisForWrite::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         char szErrMsg[256] = {0};
         if (REDIS_OK != status)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s cmd status %d!", m_strMasterNode.c_str(), status);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         if (NULL == pReply)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strMasterNode.c_str(), c->err, c->errstr);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         LOG4_TRACE("redis reply->type = %d", pReply->type);
         if (REDIS_REPLY_ERROR == pReply->type)
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strSlaveNode.c_str(), pReply->type, pReply->str);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         if (REDIS_REPLY_NIL == pReply->type) { // redis中数据为空，只需update db中的数据
@@ -112,14 +112,14 @@ namespace neb {
             if (!oRecord.ParseFromArray(pReply->str, pReply->len))
             {
                 snprintf(szErrMsg, sizeof(szErrMsg), "failed to parse redis dataset record \"%s\"", pReply->str);
-                LOG4_ERROR("%d: %s!", ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                LOG4_ERROR("%d: %s!", neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (neb::CMD_STATUS_FAULT);
             }
             if (oRecord.field_info_size() == 0)
             {
-                LOG4_ERROR("%d: can not update empty redis dataset record!", ERR_UNEXPECTED_REDIS_REPLY);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, "can not update empty redis dataset record");
+                LOG4_ERROR("%d: can not update empty redis dataset record!", neb::ERR_UNEXPECTED_REDIS_REPLY);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, "can not update empty redis dataset record");
                 return (neb::CMD_STATUS_FAULT);
             }
             iRecoredFieldSize = oRecord.field_info_size();
@@ -150,13 +150,13 @@ namespace neb {
         else
         {
             snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d for update redis dataset!", pReply->type);
-            Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepReadFromRedisForWrite::ExecUpdate(bool bDbOnly)
+    neb::E_CMD_STATUS StepReadFromRedisForWrite::ExecUpdate(bool bDbOnly)
     {
         if (bDbOnly)
         {
@@ -165,7 +165,7 @@ namespace neb {
 
             //if (RegisterCallback(pStepSendToDbAgent))
             //{
-            //    if (oss::neb::CMD_STATUS_RUNNING == pStepSendToDbAgent->Emit(ERR_OK))
+            //    if (oss::neb::CMD_STATUS_RUNNING == pStepSendToDbAgent->Emit(neb::ERR_OK))
             //    {
             //        LOG4_TRACE("pStepSendToDbAgent running");
             //        return (neb::CMD_STATUS_COMPLETED);
@@ -178,10 +178,8 @@ namespace neb {
             //}
             //else
             {
-                delete pStepSendToDbAgent;
-                pStepSendToDbAgent = NULL;
                 LOG4_ERROR("failed to RegisterCallback(pStepSendToDbAgent)!");
-                Response(m_pChannel, m_oReqMsgHead, ERR_NEW, "RegisterCallback(pStepSendToDbAgent)!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_NEW, "RegisterCallback(pStepSendToDbAgent)!");
                 return (neb::CMD_STATUS_FAULT);
             }
         }
@@ -189,20 +187,20 @@ namespace neb {
         {
             //pStepSendToDbAgent = new StepSendToDbAgent(m_pChannel, m_oReqMsgHead, m_oMemOperate, m_pRedisNodeSession, RELATIVE_DATASET, &m_oTableFields, m_strKeyField);
 
-            if (NULL == pStepSendToDbAgent)
+            if (nullptr == pStepSendToDbAgent)
             {
-                Response(m_pChannel, m_oReqMsgHead, ERR_NEW, "malloc space for pStepSendToDbAgent error!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_NEW, "malloc space for pStepSendToDbAgent error!");
                 return (neb::CMD_STATUS_FAULT);
             }
 
             //pStepWriteToRedis = new StepWriteToRedis(m_pChannel, m_oReqMsgHead, m_oMemOperate.redis_operate(), m_pRedisNodeSession, pStepSendToDbAgent);
-            if (NULL == pStepWriteToRedis)
+            if (nullptr == pStepWriteToRedis)
             {
-                Response(m_pChannel, m_oReqMsgHead, ERR_NEW, "malloc space for StepWriteToRedis error!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_NEW, "malloc space for StepWriteToRedis error!");
                 return (neb::CMD_STATUS_FAULT);
             }
             //Pretreat(pStepWriteToRedis);
-            if (neb::CMD_STATUS_RUNNING == pStepWriteToRedis->Emit(ERR_OK))
+            if (neb::CMD_STATUS_RUNNING == pStepWriteToRedis->Emit(neb::ERR_OK))
             {
                 return (neb::CMD_STATUS_COMPLETED);
             }

@@ -15,17 +15,17 @@
 extern "C" {
 #endif
     neb::Cmd* create() {
-        neb::Cmd* pCmd = new neb::CmdDataProxy(1);
+        neb::Cmd* pCmd = new DataProxy::CmdDataProxy(1);
         return (pCmd);
     }
 #ifdef __cplusplus
 }
 #endif
 
-namespace neb {
+namespace DataProxy {
 
     CmdDataProxy::CmdDataProxy(int32 iCmd)
-        : neb::Cmd(iCmd), m_pErrBuff(NULL), m_pRedisNodeSession(NULL), pStepSendToDbAgent(NULL), pStepReadFromRedis(NULL), pStepWriteToRedis(NULL), pStepReadFromRedisForWrite(NULL)
+        : neb::Cmd(iCmd), m_pErrBuff(NULL), m_pRedisNodeSession(NULL), m_pStepSendToDbAgent(NULL), m_pStepReadFromRedis(NULL), m_pStepWriteToRedis(NULL), m_pStepReadFromRedisForWrite(NULL)
     {
         m_pErrBuff = (char*)malloc(gc_iErrBuffSize);
     }
@@ -53,7 +53,7 @@ namespace neb {
         LOG4_DEBUG("%s()", __FUNCTION__);
         neb::CJsonObject oConfJson;
         //配置文件路径查找
-        std::string strConfFile = GetWorkPath() + std::string("Proxy/CmdDataProxy.json");
+        std::string strConfFile = GetWorkPath() + std::string("/release/conf/Proxy/CmdDataProxy.json");
         LOG4_TRACE("CONF FILE = %s.", strConfFile.c_str());
 
         std::ifstream fin(strConfFile.c_str());
@@ -110,19 +110,22 @@ namespace neb {
                                             {
                                                 for (int l = 0; l < oConfJson["cluster"][oConfJson["data_type"](i)][oConfJson["section_factor"](j)][szFactorSectionKey].GetArraySize(); ++l)
                                                 {
-                                                    //SessionRedisNode* pNodeSession = (SessionRedisNode*)GetSession(szSessionId, "oss::SessionRedisNode");
-                                                    SessionRedisNode* pNodeSession = NULL;
-                                                    if (pNodeSession == NULL)
+                                                    m_pRedisNodeSession = std::dynamic_pointer_cast<SessionRedisNode>(GetSession(szSessionId));
+                                                    if (m_pRedisNodeSession == nullptr)
                                                     {
-                                                        pNodeSession = new SessionRedisNode(szSessionId, iHashAlgorithm, iVirtualNodeNum);
-                                                        LOG4_TRACE("register node session %s", szSessionId);
-                                                        //RegisterCallback(pNodeSession);
+                                                        m_pRedisNodeSession = std::dynamic_pointer_cast<SessionRedisNode>(MakeSharedSession("DataProxy::SessionRedisNode",
+                                                            std::string(szSessionId), iHashAlgorithm, iVirtualNodeNum, 100.0));
+                                                        if (nullptr == m_pRedisNodeSession)
+                                                        {
+                                                            LOG4_ERROR("fail to alloc SessionRedisNode");
+                                                            return false;
+                                                        }
                                                     }
                                                     strRedisNode = oConfJson["cluster"][oConfJson["data_type"](i)][oConfJson["section_factor"](j)][szFactorSectionKey](l);
                                                     if (oConfJson["redis_group"][strRedisNode].Get("master", strMaster) && oConfJson["redis_group"][strRedisNode].Get("slave", strSlave))
                                                     {
                                                         LOG4_TRACE("Add node %s[%s, %s] to %s!", strRedisNode.c_str(), strMaster.c_str(), strSlave.c_str(), szSessionId);
-                                                        pNodeSession->AddRedisNode(strRedisNode, strMaster, strSlave);
+                                                        m_pRedisNodeSession->AddRedisNode(strRedisNode, strMaster, strSlave);
                                                     }
                                                 }
                                             }
@@ -184,7 +187,7 @@ namespace neb {
     {
         LOG4_DEBUG("%s()", __FUNCTION__);
         //配置文件路径查找
-        std::string strConfFile = GetWorkPath() + std::string("Proxy/CmdDataProxyTableRelative.json");
+        std::string strConfFile = GetWorkPath() + std::string("/release/conf/Proxy/CmdDataProxyTableRelative.json");
         LOG4_DEBUG("CONF FILE = %s.", strConfFile.c_str());
 
         std::ifstream fin(strConfFile.c_str());
@@ -304,7 +307,7 @@ namespace neb {
         }
         else
         {
-            Response(pChannel, oInMsgHead, ERR_PARASE_PROTOBUF, "failed to parse neb::Mydis from oInMsgBody.body()!");
+            Response(pChannel, oInMsgHead, neb::ERR_PARASE_PROTOBUF, "failed to parse neb::Mydis from oInMsgBody.body()!");
             return (false);
         }
     }
@@ -345,12 +348,12 @@ namespace neb {
                 uint32 uiHash = 0;
                 if (oMemOperate.redis_operate().hash_key().size() > 0)
                 {
-                    uiHash = loss::CalcKeyHash(oMemOperate.redis_operate().hash_key().c_str(), oMemOperate.redis_operate().hash_key().size());
+                    uiHash = CalcKeyHash(oMemOperate.redis_operate().hash_key().c_str(), oMemOperate.redis_operate().hash_key().size());
                     oMemOperate.set_section_factor(uiHash);
                 }
                 else
                 {
-                    uiHash = loss::CalcKeyHash(oMemOperate.redis_operate().key_name().c_str(), oMemOperate.redis_operate().key_name().size());
+                    uiHash = CalcKeyHash(oMemOperate.redis_operate().key_name().c_str(), oMemOperate.redis_operate().key_name().size());
                     oMemOperate.set_section_factor(uiHash);
                 }
             }
@@ -363,7 +366,7 @@ namespace neb {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!oMemOperate.has_redis_operate() && !oMemOperate.has_db_operate())
         {
-            Response(pChannel, oInMsgHead, ERR_INCOMPLET_DATAPROXY_DATA, "neighter redis_operate nor db_operate was exist!");
+            Response(pChannel, oInMsgHead, neb::ERR_INCOMPLET_DATAPROXY_DATA, "neighter redis_operate nor db_operate was exist!");
             return (false);
         }
         int32 iDataType;
@@ -380,15 +383,15 @@ namespace neb {
                 || !m_oJsonTableRelative["redis_struct"][szRedisDataPurpose].Get("section_factor", iSectionFactorType))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "no \"data_type\" or \"section_factor\" config in  m_oJsonTableRelative[\"redis_struct\"][\"%s\"]", szRedisDataPurpose);
-                LOG4_ERROR("error %d: %s", ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
-                Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                 return (false);
             }
             if (!GetNodeSession(iDataType, iSectionFactorType, oMemOperate.section_factor()))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "no route for data_type %d section_factor_type %d factor %u", iDataType, iSectionFactorType, oMemOperate.section_factor());
-                LOG4_ERROR("error %d: no route for data_type %d section_factor_type %d factor %u!", ERR_INVALID_REDIS_ROUTE, iDataType, iSectionFactorType, oMemOperate.section_factor());
-                Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                LOG4_ERROR("error %d: no route for data_type %d section_factor_type %d factor %u!", neb::ERR_INVALID_REDIS_ROUTE, iDataType, iSectionFactorType, oMemOperate.section_factor());
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                 return (false);
             }
         }
@@ -402,8 +405,8 @@ namespace neb {
                 || !m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()].Get("section_factor", iSectionFactorType))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "no \"data_type\" or \"section_factor\" config in " "m_oJsonTableRelative[\"tables\"][\"%s\"]", oMemOperate.db_operate().table_name().c_str());
-                LOG4_ERROR("error %d: %s", ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
-                Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                 return (false);
             }
         }
@@ -411,12 +414,12 @@ namespace neb {
         {
             if (neb::Mydis::RedisOperate::T_WRITE == oMemOperate.redis_operate().op_type() && neb::Mydis::DbOperate::SELECT == oMemOperate.db_operate().query_type())
             {
-                Response(pChannel, oInMsgHead, ERR_REDIS_AND_DB_CMD_NOT_MATCH, "redis_operate.op_type() and db_operate.query_type() was not match!");
+                Response(pChannel, oInMsgHead, neb::ERR_REDIS_AND_DB_CMD_NOT_MATCH, "redis_operate.op_type() and db_operate.query_type() was not match!");
                 return (false);
             }
             if (neb::Mydis::RedisOperate::T_READ == oMemOperate.redis_operate().op_type() && neb::Mydis::DbOperate::SELECT != oMemOperate.db_operate().query_type())
             {
-                Response(pChannel, oInMsgHead, ERR_REDIS_AND_DB_CMD_NOT_MATCH, "redis_operate.op_type() and db_operate.query_type() was not match!");
+                Response(pChannel, oInMsgHead, neb::ERR_REDIS_AND_DB_CMD_NOT_MATCH, "redis_operate.op_type() and db_operate.query_type() was not match!");
                 return (false);
             }
             char szRedisDataPurpose[16] = {0};
@@ -425,15 +428,15 @@ namespace neb {
                 || !m_oJsonTableRelative["redis_struct"][szRedisDataPurpose].Get("section_factor", iSectionFactorType))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "no \"data_type\" or \"section_factor\" config in m_oJsonTableRelative[\"redis_struct\"][\"%s\"]", szRedisDataPurpose);
-                LOG4_ERROR("error %d: %s", ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
-                Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                 return (false);
             }
             if (!GetNodeSession(iDataType, iSectionFactorType, oMemOperate.section_factor()))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "no route for data_type %d section_factor_type %d factor %u", iDataType, iSectionFactorType, oMemOperate.section_factor());
-                LOG4_ERROR("error %d: no route for data_type %d section_factor_type %d factor %u!", ERR_INVALID_REDIS_ROUTE, iDataType, iSectionFactorType, oMemOperate.section_factor());
-                Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                LOG4_ERROR("error %d: no route for data_type %d section_factor_type %d factor %u!", neb::ERR_INVALID_REDIS_ROUTE, iDataType, iSectionFactorType, oMemOperate.section_factor());
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                 return (false);
             }
             std::string strTableName;
@@ -444,8 +447,8 @@ namespace neb {
                 {
                     snprintf(m_pErrBuff, gc_iErrBuffSize, "the \"data_type\" or \"section_factor\" config were  conflict in m_oJsonTableRelative[\"redis_struct\"][\"%s\"] and "
                         "m_oJsonTableRelative[\"tables\"][\"%s\"]", szRedisDataPurpose, oMemOperate.db_operate().table_name().c_str());
-                    LOG4_ERROR("error %d: %s", ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
-                    Response(pChannel, oInMsgHead, ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                    LOG4_ERROR("error %d: %s", neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
+                    Response(pChannel, oInMsgHead, neb::ERR_INVALID_REDIS_ROUTE, m_pErrBuff);
                     return (false);
                 }
             }
@@ -459,7 +462,7 @@ namespace neb {
         if ("FLUSHALL" == oRedisOperate.redis_cmd_write() || "FLUSHDB" == oRedisOperate.redis_cmd_write()
             || "FLUSHALL" == oRedisOperate.redis_cmd_read() || "FLUSHDB" == oRedisOperate.redis_cmd_read())
         {
-            Response(pChannel, oInMsgHead, ERR_REDIS_CMD, "cmd flush was forbidden!");
+            Response(pChannel, oInMsgHead, neb::ERR_REDIS_CMD, "cmd flush was forbidden!");
             return (false);
         }
         neb::CJsonObject oJsonRedis;
@@ -469,8 +472,8 @@ namespace neb {
         if (!m_oJsonTableRelative["redis_struct"].Get(szRedisDataPurpose, oJsonRedis))
         {
             snprintf(m_pErrBuff, gc_iErrBuffSize, "the redis structure \"%s\" was not define!", szRedisDataPurpose);
-            LOG4_ERROR("error %d: the redis structure \"%s\" was not define!", ERR_REDIS_STRUCTURE_NOT_DEFINE, szRedisDataPurpose);
-            Response(pChannel, oInMsgHead, ERR_REDIS_STRUCTURE_NOT_DEFINE, m_pErrBuff);
+            LOG4_ERROR("error %d: the redis structure \"%s\" was not define!", neb::ERR_REDIS_STRUCTURE_NOT_DEFINE, szRedisDataPurpose);
+            Response(pChannel, oInMsgHead, neb::ERR_REDIS_STRUCTURE_NOT_DEFINE, m_pErrBuff);
             return (false);
         }
         /*
@@ -493,8 +496,8 @@ namespace neb {
                     snprintf(m_pErrBuff, gc_iErrBuffSize, "the redis read cmd \"%s\" matching \"HMSET\" not \"%s\"!",
                         oRedisOperate.redis_cmd_read().c_str(), oRedisOperate.redis_cmd_write().c_str());
 
-                    LOG4_ERROR("%d: %s!", ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
-                    Response(pChannel, oInMsgHead, ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    LOG4_ERROR("%d: %s!", neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    Response(pChannel, oInMsgHead, neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
                     return (false);
                 }
                 else if (std::string("HGET") == oRedisOperate.redis_cmd_read() && std::string("HSET") != oRedisOperate.redis_cmd_write())
@@ -502,8 +505,8 @@ namespace neb {
                     snprintf(m_pErrBuff, gc_iErrBuffSize, "the redis read cmd \"%s\" matching \"HMSET\" not \"%s\"!",
                         oRedisOperate.redis_cmd_read().c_str(), oRedisOperate.redis_cmd_write().c_str());
 
-                    LOG4_ERROR("%d: %s!", ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
-                    Response(pChannel, oInMsgHead, ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    LOG4_ERROR("%d: %s!", neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    Response(pChannel, oInMsgHead, neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
                     return (false);
                 }
             }
@@ -514,8 +517,8 @@ namespace neb {
                     snprintf(m_pErrBuff, gc_iErrBuffSize, "the redis read cmd \"%s\" matching \"HMSET\" not \"%s\"!",
                         oRedisOperate.redis_cmd_read().c_str(), oRedisOperate.redis_cmd_write().c_str());
 
-                    LOG4_ERROR("%d: %s!", ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
-                    Response(pChannel, oInMsgHead, ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    LOG4_ERROR("%d: %s!", neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
+                    Response(pChannel, oInMsgHead, neb::ERR_REDIS_READ_WRITE_CMD_NOT_MATCH, m_pErrBuff);
                     return (false);
                 }
             }
@@ -529,8 +532,8 @@ namespace neb {
         if (m_oJsonTableRelative["tables"][oDbOperate.table_name()]["cols"].GetArraySize() == 0)
         {
             snprintf(m_pErrBuff, gc_iErrBuffSize, "the db table \"%s\" was not define!", oDbOperate.table_name().c_str());
-            LOG4_ERROR("error %d: the db table \"%s\" was not define!", ERR_DB_TABLE_NOT_DEFINE, oDbOperate.table_name().c_str());
-            Response(pChannel, oInMsgHead, ERR_DB_TABLE_NOT_DEFINE, m_pErrBuff);
+            LOG4_ERROR("error %d: the db table \"%s\" was not define!", neb::ERR_DB_TABLE_NOT_DEFINE, oDbOperate.table_name().c_str());
+            Response(pChannel, oInMsgHead, neb::ERR_DB_TABLE_NOT_DEFINE, m_pErrBuff);
             return (false);
         }
         /*
@@ -568,8 +571,8 @@ namespace neb {
             if (!(oDbOperate.fields(i).col_name().size() > 0))
             {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "the db table \"%s\" field name can not be empty!", oDbOperate.table_name().c_str());
-                LOG4_ERROR("error %d: the db table \"%s\" field name can not be empty!", ERR_TABLE_FIELD_NAME_EMPTY, oDbOperate.table_name().c_str());
-                Response(pChannel, oInMsgHead, ERR_TABLE_FIELD_NAME_EMPTY, m_pErrBuff);
+                LOG4_ERROR("error %d: the db table \"%s\" field name can not be empty!", neb::ERR_TABLE_FIELD_NAME_EMPTY, oDbOperate.table_name().c_str());
+                Response(pChannel, oInMsgHead, neb::ERR_TABLE_FIELD_NAME_EMPTY, m_pErrBuff);
                 return (false);
             }
             if (table_iter->second.end() == table_iter->second.find(oDbOperate.fields(i).col_name()) && ((oDbOperate.fields(i).col_as().size() > 0)
@@ -579,9 +582,9 @@ namespace neb {
                     oDbOperate.table_name().c_str(), oDbOperate.fields(i).col_name().c_str());
 
                 LOG4_ERROR("error %d: the query table \"%s\" field name \"%s\" is not match the table dict!",
-                    ERR_DB_FIELD_ORDER_OR_FIELD_NAME, oDbOperate.table_name().c_str(), oDbOperate.fields(i).col_name().c_str());
+                    neb::ERR_DB_FIELD_ORDER_OR_FIELD_NAME, oDbOperate.table_name().c_str(), oDbOperate.fields(i).col_name().c_str());
 
-                Response(pChannel, oInMsgHead, ERR_DB_FIELD_ORDER_OR_FIELD_NAME, m_pErrBuff);
+                Response(pChannel, oInMsgHead, neb::ERR_DB_FIELD_ORDER_OR_FIELD_NAME, m_pErrBuff);
                 return (false);
             }
         }
@@ -594,8 +597,8 @@ namespace neb {
         if (m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"].GetArraySize() != oMemOperate.db_operate().fields_size())
         {
             snprintf(m_pErrBuff, gc_iErrBuffSize, "the query table \"%s\" field num is not match the table dict field num!", oMemOperate.db_operate().table_name().c_str());
-            LOG4_ERROR("error %d: the query table \"%s\" field num is not match the table dict field num!", ERR_DB_FIELD_NUM, oMemOperate.db_operate().table_name().c_str());
-            Response(pChannel, oInMsgHead, ERR_DB_FIELD_NUM, m_pErrBuff);
+            LOG4_ERROR("error %d: the query table \"%s\" field num is not match the table dict field num!", neb::ERR_DB_FIELD_NUM, oMemOperate.db_operate().table_name().c_str());
+            Response(pChannel, oInMsgHead, neb::ERR_DB_FIELD_NUM, m_pErrBuff);
             return (false);
         }
         bool bFoundKeyField = false;
@@ -613,10 +616,10 @@ namespace neb {
                     m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"](i).c_str());
 
                 LOG4_ERROR("error %d: the query table \"%s\" query field name \"%s\" is not match the table dict field name \"%s\"",
-                    ERR_DB_FIELD_ORDER_OR_FIELD_NAME, oMemOperate.db_operate().table_name().c_str(), oMemOperate.db_operate().fields(i).col_name().c_str(),
+                    neb::ERR_DB_FIELD_ORDER_OR_FIELD_NAME, oMemOperate.db_operate().table_name().c_str(), oMemOperate.db_operate().fields(i).col_name().c_str(),
                     m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"](i).c_str());
 
-                Response(pChannel, oInMsgHead, ERR_DB_FIELD_ORDER_OR_FIELD_NAME, m_pErrBuff);
+                Response(pChannel, oInMsgHead, neb::ERR_DB_FIELD_ORDER_OR_FIELD_NAME, m_pErrBuff);
                 return (false);
             }
             if (!bFoundKeyField)
@@ -630,8 +633,8 @@ namespace neb {
         if (!bFoundKeyField)
         {
             snprintf(m_pErrBuff, gc_iErrBuffSize, "key field \"%s\" not found in the table dict!", m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-            LOG4_ERROR("error %d: key field \"%s\" not found in the table dict!", ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-            Response(pChannel, oInMsgHead, ERR_KEY_FIELD, m_pErrBuff);
+            LOG4_ERROR("error %d: key field \"%s\" not found in the table dict!", neb::ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
+            Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, m_pErrBuff);
             return (false);
         }
         return (true);
@@ -659,8 +662,8 @@ namespace neb {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "key field \"%s\" not found in the table dict!",
                     m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
                 LOG4_ERROR("error %d: key field \"%s\" not found in the table dict!",
-                    ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, m_pErrBuff);
+                    neb::ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, m_pErrBuff);
                 return (false);
             }
         }
@@ -671,8 +674,8 @@ namespace neb {
                 snprintf(m_pErrBuff, gc_iErrBuffSize, "the query table \"%s\" join field name is not match the db request field!",
                     oMemOperate.db_operate().table_name().c_str());
                 LOG4_ERROR("error %d: the query table \"%s\" join field name is not match the db request field!",
-                    ERR_JOIN_FIELDS, oMemOperate.db_operate().table_name().c_str());
-                Response(pChannel, oInMsgHead, ERR_JOIN_FIELDS, m_pErrBuff);
+                    neb::ERR_JOIN_FIELDS, oMemOperate.db_operate().table_name().c_str());
+                Response(pChannel, oInMsgHead, neb::ERR_JOIN_FIELDS, m_pErrBuff);
                 return (false);
             }
         }
@@ -686,8 +689,8 @@ namespace neb {
         {
             if (m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").size() == 0)
             {
-                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
                 return (false);
             }
 
@@ -705,9 +708,9 @@ namespace neb {
                         {
                             snprintf(m_pErrBuff, gc_iErrBuffSize, "the value of key field \"%s\" can not be empty!",
                                 m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                            LOG4_ERROR("error %d: the value of key field \"%s\" can not be empty!", ERR_KEY_FIELD_VALUE,
+                            LOG4_ERROR("error %d: the value of key field \"%s\" can not be empty!", neb::ERR_KEY_FIELD_VALUE,
                                 m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                            Response(pChannel, oInMsgHead, ERR_KEY_FIELD_VALUE, m_pErrBuff);
+                            Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD_VALUE, m_pErrBuff);
                             return (false);
                         }
                         neb::Field* pRedisKeyField = oMemOperate.mutable_redis_operate()->add_fields();
@@ -722,8 +725,8 @@ namespace neb {
                     snprintf(m_pErrBuff, gc_iErrBuffSize, "key field \"%s\" not found in the table dict!",
                         m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
                     LOG4_ERROR("error %d: key field \"%s\" not found in the table dict!",
-                        ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, m_pErrBuff);
+                        neb::ERR_KEY_FIELD, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, m_pErrBuff);
                     return (false);
                 }
                 neb::Field* pRedisField = oMemOperate.mutable_redis_operate()->mutable_fields(0);
@@ -733,27 +736,27 @@ namespace neb {
             { // 命令如果是HDEL，redis后面的参数有且仅有一个，参数的名或值至少有一个不为空
                 if (oMemOperate.redis_operate().fields_size() != 1)
                 {
-                    LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hdel field num must be 1!");
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hdel field num must be 1");
+                    LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hdel field num must be 1!");
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hdel field num must be 1");
                     return (false);
                 }
                 if (oMemOperate.redis_operate().fields(0).col_name().size() == 0)
                 {
-                    LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field name is empty for hdel!");
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field name is empty for hdel!");
+                    LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field name is empty for hdel!");
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field name is empty for hdel!");
                     return (false);
                 }
                 else if (oMemOperate.redis_operate().fields(0).col_value().size() > 0)
                 {
-                    LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field value is not empty for hdel!");
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field value is not empty for hdel!");
+                    LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field value is not empty for hdel!");
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field value is not empty for hdel!");
                     return (false);
                 }
             }
             else
             { // 命令非法
-                LOG4_ERROR("error %d: %s", ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with dataset cmd error!");
-                Response(pChannel, oInMsgHead, ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with dataset cmd error!");
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with dataset cmd error!");
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with dataset cmd error!");
                 return (false);
             }
         }
@@ -792,8 +795,8 @@ namespace neb {
         {
             if (m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").size() == 0)
             {
-                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
                 return (false);
             }
 
@@ -811,9 +814,9 @@ namespace neb {
                             {
                                 snprintf(m_pErrBuff, gc_iErrBuffSize, "the value of key field \"%s\" can not be empty!",
                                     m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                                LOG4_ERROR("error %d: the value of key field \"%s\" can not be empty!", ERR_KEY_FIELD_VALUE,
+                                LOG4_ERROR("error %d: the value of key field \"%s\" can not be empty!", neb::ERR_KEY_FIELD_VALUE,
                                     m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                                Response(pChannel, oInMsgHead, ERR_KEY_FIELD_VALUE, m_pErrBuff);
+                                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD_VALUE, m_pErrBuff);
                                 return (false);
                             }
                             neb::Field* pRedisKeyField = oMemOperate.mutable_redis_operate()->add_fields();
@@ -829,8 +832,8 @@ namespace neb {
                             if ((oMemOperate.db_operate().fields(i).col_value().size() == 0) || oMemOperate.db_operate().fields(i).col_value().size() == 0)
                             {
                                 snprintf(m_pErrBuff, gc_iErrBuffSize, "the value of join field \"%s\" can not be empty!", oMemOperate.db_operate().fields(i).col_name().c_str());
-                                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD_VALUE, "the value of join field \"%s\" can not be empty!", oMemOperate.db_operate().fields(i).col_name().c_str());
-                                Response(pChannel, oInMsgHead, ERR_KEY_FIELD_VALUE, m_pErrBuff);
+                                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD_VALUE, "the value of join field \"%s\" can not be empty!", oMemOperate.db_operate().fields(i).col_name().c_str());
+                                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD_VALUE, m_pErrBuff);
                                 return (false);
                             }
                             join_field_iter->second = oMemOperate.db_operate().fields(i).col_value();
@@ -839,8 +842,8 @@ namespace neb {
                     if (oMemOperate.redis_operate().fields_size() == 0)
                     {
                         snprintf(m_pErrBuff, gc_iErrBuffSize, "key field \"%s\" not found in the request redis operator!", m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                        LOG4_ERROR("error %d: key field \"%s\" not found in the request redis operator!", ERR_LACK_JOIN_FIELDS, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                        Response(pChannel, oInMsgHead, ERR_LACK_JOIN_FIELDS, m_pErrBuff);
+                        LOG4_ERROR("error %d: key field \"%s\" not found in the request redis operator!", neb::ERR_LACK_JOIN_FIELDS, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
+                        Response(pChannel, oInMsgHead, neb::ERR_LACK_JOIN_FIELDS, m_pErrBuff);
                         return (false);
                     }
                     std::string strRedisFieldValue;
@@ -864,21 +867,21 @@ namespace neb {
             { // 命令如果是HDEL，redis后面的参数有且仅有一个，参数的名或值至少有一个不为空
                 if (oMemOperate.redis_operate().fields(0).col_name().size() == 0)
                 {
-                    LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field name is empty for hdel!");
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field name is empty for hdel!");
+                    LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field name is empty for hdel!");
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field name is empty for hdel!");
                     return (false);
                 }
                 else if (oMemOperate.redis_operate().fields(0).col_value().size() > 0)
                 {
-                    LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field value is not empty for hdel!");
-                    Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field value is not empty for hdel!");
+                    LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field value is not empty for hdel!");
+                    Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field value is not empty for hdel!");
                     return (false);
                 }
             }
             else
             { // 命令非法
-                LOG4_ERROR("error %d: %s", ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with field join cmd error!");
-                Response(pChannel, oInMsgHead, ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with field join cmd error!");
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with field join cmd error!");
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash with field join cmd error!");
                 return (false);
             }
         }
@@ -900,8 +903,8 @@ namespace neb {
                             snprintf(m_pErrBuff, gc_iErrBuffSize, "the value of key field \"%s\" can not be empty!",
                                 m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
                             LOG4_ERROR("error %d: the value of key field \"%s\" can not be empty!",
-                                ERR_KEY_FIELD_VALUE, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
-                            Response(pChannel, oInMsgHead, ERR_KEY_FIELD_VALUE, m_pErrBuff);
+                                neb::ERR_KEY_FIELD_VALUE, m_oJsonTableRelative["redis_struct"][strRedisDataPurpose]("key_field").c_str());
+                            Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD_VALUE, m_pErrBuff);
                             return (false);
                         }
                         join_field_iter->second = oMemOperate.db_operate().fields(i).col_value();
@@ -933,15 +936,23 @@ namespace neb {
         LOG4_DEBUG("%s()", __FUNCTION__);
         if (neb::Mydis::RedisOperate::T_WRITE == oMemOperate.redis_operate().op_type())
         {
-            pStepWriteToRedis = std::dynamic_pointer_cast<StepWriteToRedis>(MakeSharedStep("dataproxy::StepWriteToRedis", pChannel,
-                oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession));
-            if (NULL == pStepWriteToRedis)
+            if (nullptr == m_pRedisNodeSession)
             {
-                Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for StepWriteToRedis error!");
+                LOG4_DEBUG("%s()", __FUNCTION__);
+            } 
+            else
+            {
+                LOG4_DEBUG("%s()", __FUNCTION__);
+            }
+            m_pStepWriteToRedis = std::dynamic_pointer_cast<StepWriteToRedis>(MakeSharedStep("DataProxy::StepWriteToRedis", pChannel,
+                oInMsgHead, oMemOperate, m_pRedisNodeSession, nullptr));
+            if (nullptr == m_pStepWriteToRedis)
+            {
+                Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for StepWriteToRedis error!");
                 return (false);
             }
 
-            if (neb::CMD_STATUS_RUNNING == pStepWriteToRedis->Emit(ERR_OK))
+            if (neb::CMD_STATUS_RUNNING == m_pStepWriteToRedis->Emit(neb::ERR_OK))
             {
                 return (true);
             }
@@ -953,23 +964,23 @@ namespace neb {
             snprintf(szRedisDataPurpose, 16, "%d", oMemOperate.redis_operate().data_purpose());
             if (m_oJsonTableRelative["relative"]("dataset") == m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("relative"))
             {
-                pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("dataproxy::StepReadFromRedis",
+                m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",
                     pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, true,
                     &m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"],
                     m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field")));
             }
             else
             {
-                pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("dataproxy::StepReadFromRedis",
+                m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",
                     pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, false,NULL,"", NULL));
             }
-            if (NULL == pStepReadFromRedis)
+            if (NULL == m_pStepReadFromRedis)
             {
-                Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for StepWriteToRedis error!");
+                Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for StepWriteToRedis error!");
                 return (false);
             }
 
-            if (neb::CMD_STATUS_RUNNING == pStepReadFromRedis->Emit(ERR_OK))
+            if (neb::CMD_STATUS_RUNNING == m_pStepReadFromRedis->Emit(neb::ERR_OK))
             {
                 return (true);
             }
@@ -980,14 +991,14 @@ namespace neb {
     bool CmdDataProxy::DbOnly(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate)
     {
         LOG4_DEBUG("%s()", __FUNCTION__);
-        pStepSendToDbAgent =  std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("dataproxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession));
-        if (NULL == pStepSendToDbAgent)
+        m_pStepSendToDbAgent =  std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("DataProxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession));
+        if (NULL == m_pStepSendToDbAgent)
         {
-            Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for pStepSendToDbAgent error!");
+            Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for m_pStepSendToDbAgent error!");
             return (false);
         }
 
-        if (neb::CMD_STATUS_RUNNING == pStepSendToDbAgent->Emit(ERR_OK))
+        if (neb::CMD_STATUS_RUNNING == m_pStepSendToDbAgent->Emit(neb::ERR_OK))
         {
             return (true);
         }
@@ -1003,34 +1014,34 @@ namespace neb {
         char szRedisDataPurpose[16] = {0};
         snprintf(szRedisDataPurpose, 16, "%d", oMemOperate.redis_operate().data_purpose());
         std::string strTableName = m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("table");
-        pStepSendToDbAgent = std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("dataproxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession,
+        m_pStepSendToDbAgent = std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("DataProxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession,
             atoi(m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("relative").c_str()), &m_oJsonTableRelative["tables"][strTableName]["cols"],
             m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field"), &m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]["join_fields"]));
 
-        if (NULL == pStepSendToDbAgent)
+        if (NULL == m_pStepSendToDbAgent)
         {
-            Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for pStepSendToDbAgent error!");
+            Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for m_pStepSendToDbAgent error!");
             return (false);
         }
 
         if (m_oJsonTableRelative["relative"]("dataset") == m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("relative"))
         {
-            pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("dataproxy::StepReadFromRedis",pChannel, oInMsgHead,
+            m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",pChannel, oInMsgHead,
                 oMemOperate.redis_operate(), m_pRedisNodeSession, true, &m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"],
-                m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field"), pStepSendToDbAgent));
+                m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field"), m_pStepSendToDbAgent));
         }
         else
         {
-            pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("dataproxy::StepReadFromRedis",
-                pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, false, NULL, "", pStepSendToDbAgent));
+            m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",
+                pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, false, NULL, "", m_pStepSendToDbAgent));
         }
-        if (NULL == pStepReadFromRedis)
+        if (NULL == m_pStepReadFromRedis)
         {
-            Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for StepWriteToRedis error!");
+            Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for StepWriteToRedis error!");
             return (false);
         }
 
-        if (neb::CMD_STATUS_RUNNING == pStepReadFromRedis->Emit(ERR_OK))
+        if (neb::CMD_STATUS_RUNNING == m_pStepReadFromRedis->Emit(neb::ERR_OK))
         {
             return (true);
         }
@@ -1040,21 +1051,21 @@ namespace neb {
     bool CmdDataProxy::WriteBoth(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, neb::Mydis& oMemOperate)
     {
         LOG4_DEBUG("%s()", __FUNCTION__);
-        pStepSendToDbAgent = std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("dataproxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession));
-        if (NULL == pStepSendToDbAgent)
+        m_pStepSendToDbAgent = std::dynamic_pointer_cast<StepSendToDbAgent>(MakeSharedStep("DataProxy::StepSendToDbAgent",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession));
+        if (NULL == m_pStepSendToDbAgent)
         {
-            Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for pStepSendToDbAgent error!");
+            Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for m_pStepSendToDbAgent error!");
             return (false);
         }
 
-        pStepWriteToRedis = std::dynamic_pointer_cast<StepWriteToRedis>(MakeSharedStep("dataproxy::StepWriteToRedis", pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, pStepSendToDbAgent));
-        if (NULL == pStepWriteToRedis)
+        m_pStepWriteToRedis = std::dynamic_pointer_cast<StepWriteToRedis>(MakeSharedStep("DataProxy::StepWriteToRedis", pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, m_pStepSendToDbAgent));
+        if (NULL == m_pStepWriteToRedis)
         {
-            Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for StepWriteToRedis error!");
+            Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for StepWriteToRedis error!");
             return (false);
         }
 
-        if (neb::CMD_STATUS_RUNNING == pStepWriteToRedis->Emit(ERR_OK))
+        if (neb::CMD_STATUS_RUNNING == m_pStepWriteToRedis->Emit(neb::ERR_OK))
         {
             return (true);
         }
@@ -1070,39 +1081,39 @@ namespace neb {
             snprintf(szRedisDataPurpose, 16, "%d", oMemOperate.redis_operate().data_purpose());
             if (m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field").size() == 0)
             {
-                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "miss key_field in CmdDataProxyTableRelative.json config!");
                 return (false);
             }
             if (("HSET" != oMemOperate.redis_operate().redis_cmd_write() && "HDEL" != oMemOperate.redis_operate().redis_cmd_write()) || oMemOperate.redis_operate().fields_size() != 1)
             {
-                LOG4_ERROR("error %d: %s", ERR_INVALID_CMD_FOR_HASH_DATASET, "hash set cmd error, or invalid hash field num!");
-                Response(pChannel, oInMsgHead, ERR_INVALID_CMD_FOR_HASH_DATASET, "hash set cmd error, or invalid hash field num!");
+                LOG4_ERROR("error %d: %s", neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash set cmd error, or invalid hash field num!");
+                Response(pChannel, oInMsgHead, neb::ERR_INVALID_CMD_FOR_HASH_DATASET, "hash set cmd error, or invalid hash field num!");
                 return (false);
             }
             else if (oMemOperate.redis_operate().fields(0).col_name().size() == 0)
             {
-                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field name is empty!");
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field name is empty!");
+                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field name is empty!");
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field name is empty!");
                 return (false);
             }
             else if (oMemOperate.redis_operate().fields(0).col_value().size() > 0)
             {
-                LOG4_ERROR("error %d: %s", ERR_KEY_FIELD, "hash field value is not empty!");
-                Response(pChannel, oInMsgHead, ERR_KEY_FIELD, "hash field value is not empty!");
+                LOG4_ERROR("error %d: %s", neb::ERR_KEY_FIELD, "hash field value is not empty!");
+                Response(pChannel, oInMsgHead, neb::ERR_KEY_FIELD, "hash field value is not empty!");
                 return (false);
             }
             oMemOperate.mutable_redis_operate()->set_redis_cmd_read("HGET");
-            pStepReadFromRedisForWrite = std::dynamic_pointer_cast<StepReadFromRedisForWrite>(MakeSharedStep("dataproxy::StepReadFromRedisForWrite",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession,
+            m_pStepReadFromRedisForWrite = std::dynamic_pointer_cast<StepReadFromRedisForWrite>(MakeSharedStep("DataProxy::StepReadFromRedisForWrite",pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession,
                 m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"], m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field")));
 
-            if (NULL == pStepReadFromRedisForWrite)
+            if (NULL == m_pStepReadFromRedisForWrite)
             {
-                Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for pStepReadFromRedisForWrite error!");
+                Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for m_pStepReadFromRedisForWrite error!");
                 return (false);
             }
 
-            if (neb::CMD_STATUS_RUNNING == pStepReadFromRedisForWrite->Emit(ERR_OK))
+            if (neb::CMD_STATUS_RUNNING == m_pStepReadFromRedisForWrite->Emit(neb::ERR_OK))
             {
                 return (true);
             }
@@ -1112,24 +1123,24 @@ namespace neb {
         {
             oMemOperate.mutable_redis_operate()->set_redis_cmd_read("GET");
             oMemOperate.mutable_redis_operate()->clear_fields();
-            pStepReadFromRedisForWrite = std::dynamic_pointer_cast<StepReadFromRedisForWrite>(MakeSharedStep("dataproxy::StepReadFromRedisForWrite",
+            m_pStepReadFromRedisForWrite = std::dynamic_pointer_cast<StepReadFromRedisForWrite>(MakeSharedStep("DataProxy::StepReadFromRedisForWrite",
                 pChannel, oInMsgHead, oMemOperate, m_pRedisNodeSession, m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"], ""));
 
-            if (NULL == pStepReadFromRedisForWrite)
+            if (NULL == m_pStepReadFromRedisForWrite)
             {
-                Response(pChannel, oInMsgHead, ERR_NEW, "malloc space for pStepReadFromRedisForWrite error!");
+                Response(pChannel, oInMsgHead, neb::ERR_NEW, "malloc space for m_pStepReadFromRedisForWrite error!");
                 return (false);
             }
 
-            if (neb::CMD_STATUS_RUNNING == pStepReadFromRedisForWrite->Emit(ERR_OK)) {
+            if (neb::CMD_STATUS_RUNNING == m_pStepReadFromRedisForWrite->Emit(neb::ERR_OK)) {
                 return (true);
             }
             return (false);
         }
         else
         {
-            LOG4_ERROR("error %d: %s", ERR_UNDEFINE_REDIS_OPERATE, "only hash an string had update dataset supported!");
-            Response(pChannel, oInMsgHead, ERR_UNDEFINE_REDIS_OPERATE, "only hash an string had update dataset supported!");
+            LOG4_ERROR("error %d: %s", neb::ERR_UNDEFINE_REDIS_OPERATE, "only hash an string had update dataset supported!");
+            Response(pChannel, oInMsgHead, neb::ERR_UNDEFINE_REDIS_OPERATE, "only hash an string had update dataset supported!");
             return (false);
         }
     }
@@ -1168,7 +1179,7 @@ namespace neb {
             else
             {
                 snprintf(szFactor, 32, "%u:%u:%u", iDataType, iSectionFactorType, *c_section_iter);
-                //m_pRedisNodeSession = (SessionRedisNode*)GetSession(std::string(szFactor));
+                m_pRedisNodeSession = std::dynamic_pointer_cast<SessionRedisNode>(GetSession(std::string(szFactor)));
                 return (true);
             }
         }

@@ -5,7 +5,7 @@
     "//port":"系统内各Server之间通信监听的端口",
     "port":16000,
     "//server_name":"异步事件驱动Server",
-    "server_name":"Center",
+    "server_name":"ly_Center",
     "//process_num":"进程数量",
     "process_num":1,
     "//worker_capacity":"子进程最大工作负荷",
@@ -13,8 +13,7 @@
     "//config_path":"配置文件路径（相对路径）",
     "config_path":"conf/",
     "beacon": [
-        { "host": "192.168.1.11", "port": 16000 },
-        { "host": "192.168.1.12", "port": 16000 }
+        { "host": "192.168.0.20", "port": 16000 }
     ],
     "//log_path":"日志文件路径（相对路径）",
     "log_path":"release/log/",

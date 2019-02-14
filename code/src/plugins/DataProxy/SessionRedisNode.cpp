@@ -13,10 +13,10 @@
 //#include "cryptopp562/hex.h"
 #include "SessionRedisNode.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    SessionRedisNode::SessionRedisNode(const std::string& strSessionId, int iHashAlgorithm, int iVirtualNodeNum, ev_tstamp dSessionTimeout)
-        : Session(strSessionId, dSessionTimeout),
+    SessionRedisNode::SessionRedisNode(const std::string& strSessionId, int iHashAlgorithm, int iVirtualNodeNum, double dSessionTimeout)
+        : neb::Session(strSessionId, dSessionTimeout),
         m_iHashAlgorithm(iHashAlgorithm), m_iVirtualNodeNum(iVirtualNodeNum)
     {
     }
@@ -28,9 +28,9 @@ namespace neb {
 
     bool SessionRedisNode::GetRedisNode(const std::string& strHashKey, std::string& strMasterNodeIdentify, std::string& strSlaveNodeIdentify) {
         uint32 uiKeyHash = 0;
-        if (HASH_fnv1_64 == m_iHashAlgorithm) {
+        if (neb::HASH_fnv1_64 == m_iHashAlgorithm) {
             uiKeyHash = hash_fnv1_64(strHashKey.c_str(), strHashKey.size());
-        } else if (HASH_murmur3_32 == m_iHashAlgorithm) {
+        } else if (neb::HASH_murmur3_32 == m_iHashAlgorithm) {
             uiKeyHash = murmur3_32(strHashKey.c_str(), strHashKey.size(), 0x000001b3);
         } else {
             uiKeyHash = hash_fnv1a_64(strHashKey.c_str(), strHashKey.size());
@@ -52,7 +52,7 @@ namespace neb {
     void SessionRedisNode::AddRedisNode(const std::string& strNodeIdentify,
         const std::string& strMasterHostPort,
         const std::string& strSlaveHostPort) {
-            LOG4_DEBUG("%s()", __FUNCTION__);
+            //LOG4_DEBUG("%s()", __FUNCTION__);
             std::map<std::string, tagRedisNodeAttr* >::iterator node_iter = m_mapRedisNode.find(strNodeIdentify);
             if (node_iter == m_mapRedisNode.end()) {
                 /*
@@ -91,7 +91,7 @@ namespace neb {
                             | ((uint32)(szDigest[1 + j * iPointPerHash] & 0xFF) << 8)
                             | (szDigest[j * iPointPerHash] & 0xFF);
                         pRedisNodeAttr->vecHash.push_back(k);
-                        LOG4_DEBUG("uiHashValue = %u, szVirtualNodeIdentify = %s", k, szVirtualNodeIdentify);
+                        //LOG4_DEBUG("uiHashValue = %u, szVirtualNodeIdentify = %s", k, szVirtualNodeIdentify);
                         m_mapRedisNodeHash.insert(std::pair<uint32, std::pair<std::string, std::string> >(k,
                             std::make_pair(strMasterHostPort, strSlaveHostPort)));
                     }
@@ -112,7 +112,7 @@ namespace neb {
     }
 
     void SessionRedisNode::DelRedisNode(const std::string& strNodeIdentify) {
-        LOG4_DEBUG("%s()", __FUNCTION__);
+        //LOG4_DEBUG("%s()", __FUNCTION__);
         std::map<std::string, tagRedisNodeAttr* >::iterator node_iter = m_mapRedisNode.find(strNodeIdentify);
         if (node_iter != m_mapRedisNode.end()) {
             for (std::vector<uint32>::iterator hash_iter = node_iter->second->vecHash.begin();
@@ -125,11 +125,11 @@ namespace neb {
     }
 
     uint32 SessionRedisNode::hash_fnv1_64(const char* key, size_t key_length) {
-        uint64_t hash = FNV_64_INIT;
+        uint64_t hash = neb::FNV_64_INIT;
         size_t x;
 
         for (x = 0; x < key_length; x++) {
-            hash *= FNV_64_PRIME;
+            hash *= neb::FNV_64_PRIME;
             hash ^= (uint64_t)key[x];
         }
 
@@ -137,13 +137,13 @@ namespace neb {
     }
 
     uint32 SessionRedisNode::hash_fnv1a_64(const char* key, size_t key_length) {
-        uint32_t hash = (uint32_t) FNV_64_INIT;
+        uint32_t hash = (uint32_t) neb::FNV_64_INIT;
         size_t x;
 
         for (x = 0; x < key_length; x++) {
             uint32_t val = (uint32_t)key[x];
             hash ^= val;
-            hash *= (uint32_t) FNV_64_PRIME;
+            hash *= (uint32_t) neb::FNV_64_PRIME;
         }
 
         return hash;

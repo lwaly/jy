@@ -13,7 +13,7 @@
     "//port":"系统内各Server之间通信监听的端口",
     "port":16002,
     "//server_name":"异步事件驱动Server",
-    "server_name":"Access",
+    "server_name":"ly_Access",
     "//process_num":"进程数量",
     "process_num":1,
     "//worker_capacity":"子进程最大工作负荷",

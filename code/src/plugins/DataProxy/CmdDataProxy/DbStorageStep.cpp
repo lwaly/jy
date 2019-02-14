@@ -9,10 +9,10 @@
 ******************************************************************************/
 #include "DbStorageStep.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     DbStorageStep::DbStorageStep(std::shared_ptr<Step> pNextStep)
-        : PbStep(pNextStep,gc_dDefaultTimeout)
+        : PbStep(pNextStep,neb::gc_dDefaultTimeout)
     {
     }
 

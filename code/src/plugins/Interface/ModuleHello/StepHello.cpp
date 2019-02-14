@@ -95,7 +95,11 @@ neb::E_CMD_STATUS StepHello::CallbackHello(
     oHttpMsg.mutable_headers()->insert(google::protobuf::MapPair<std::string, std::string>("Access-Control-Allow-Headers", "Origin, Content-Type, Cookie, Accept"));
     oHttpMsg.mutable_headers()->insert(google::protobuf::MapPair<std::string, std::string>("Access-Control-Allow-Methods", "GET, POST"));
     oHttpMsg.mutable_headers()->insert(google::protobuf::MapPair<std::string, std::string>("Access-Control-Allow-Credentials", "true"));
+    neb::CJsonObject oResponseData;
     oHttpMsg.set_body(oInMsgBody.data());
+    oResponseData.Add("code", oInMsgBody.rsp_result().code());
+    oResponseData.Add("msg", oInMsgBody.rsp_result().msg());
+    oHttpMsg.set_body(oResponseData.ToFormattedString());
     SendTo(m_pRequestUpstreamChannel, oHttpMsg);
     return (neb::CMD_STATUS_COMPLETED);
 }

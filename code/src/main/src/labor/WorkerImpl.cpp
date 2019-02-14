@@ -116,8 +116,8 @@ void WorkerImpl::RedisConnectCallback(const redisAsyncContext *c, int status)
 {
     if (c->data != NULL)
     {
-        Worker* pWorker = (Worker*)c->data;
-        pWorker->m_pImpl->OnRedisConnected(c, status);
+        WorkerImpl* pWorker = (WorkerImpl*)c->data;
+        pWorker->OnRedisConnected(c, status);
     }
 }
 
@@ -125,8 +125,8 @@ void WorkerImpl::RedisDisconnectCallback(const redisAsyncContext *c, int status)
 {
     if (c->data != NULL)
     {
-        Worker* pWorker = (Worker*)c->data;
-        pWorker->m_pImpl->OnRedisDisconnected(c, status);
+        WorkerImpl* pWorker = (WorkerImpl*)c->data;
+        pWorker->OnRedisDisconnected(c, status);
     }
 }
 
@@ -134,8 +134,8 @@ void WorkerImpl::RedisCmdCallback(redisAsyncContext *c, void *reply, void *privd
 {
     if (c->data != NULL)
     {
-        Worker* pWorker = (Worker*)c->data;
-        pWorker->m_pImpl->OnRedisCmdResult(c, reply, privdata);
+        WorkerImpl* pWorker = (WorkerImpl*)c->data;
+        pWorker->OnRedisCmdResult(c, reply, privdata);
     }
 }
 
@@ -552,7 +552,7 @@ bool WorkerImpl::OnSessionTimeout(std::shared_ptr<Session> pSession)
 
 bool WorkerImpl::OnRedisConnected(const redisAsyncContext *c, int status)
 {
-    LOG4_TRACE(" ");
+    LOG4_DEBUG("%s()", __FUNCTION__);
     auto channel_iter = m_mapRedisChannel.find((redisAsyncContext*)c);
     if (channel_iter != m_mapRedisChannel.end())
     {
@@ -578,6 +578,7 @@ bool WorkerImpl::OnRedisConnected(const redisAsyncContext *c, int status)
                 if (iCmdStatus == REDIS_OK)
                 {
                     LOG4_DEBUG("succeed in sending redis cmd: %s", (*step_iter)->CmdToString().c_str());
+                    step_iter++;
                 }
                 else
                 {

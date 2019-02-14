@@ -12,18 +12,20 @@
 
 #include "RedisStorageStep.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepReadFromRedis: public RedisStorageStep {
+    class StepReadFromRedis: public RedisStorageStep, public neb::DynamicCreator<StepReadFromRedis, std::shared_ptr<neb::SocketChannel>, MsgHead,
+        neb::Mydis::RedisOperate, std::shared_ptr<SessionRedisNode>, bool, const neb::CJsonObject*, std::string, std::shared_ptr<neb::Step>>
+    {
     public:
         StepReadFromRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate,
-            SessionRedisNode* pNodeSession, bool bIsDataSet = false, const neb::CJsonObject* pTableFields = NULL,
-            const std::string& strKeyField = "", Step* pNextStep = NULL);
+            std::shared_ptr<SessionRedisNode> pNodeSession, bool bIsDataSet = false, const neb::CJsonObject* pTableFields = NULL,
+            const std::string& strKeyField = "", std::shared_ptr<neb::Step> pNextStep = nullptr);
         virtual ~StepReadFromRedis();
 
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
-
-        virtual E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
+        //virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL);
+        virtual neb::E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
 
     protected:
         bool ReadReplyArray(redisReply* pReply);
@@ -49,8 +51,8 @@ namespace neb {
         int m_iTableFieldNum;
 
     public:
-        SessionRedisNode* m_pNodeSession;
-        Step* m_pNextStep;
+        std::shared_ptr<SessionRedisNode> m_pNodeSession;
+        std::shared_ptr<neb::Step> m_pNextStep;
     };
 
 } /* namespace neb */

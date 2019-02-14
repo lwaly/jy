@@ -13,9 +13,10 @@
 #include "DbStorageStep.hpp"
 #include "StepWriteBackToRedis.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepSendToDbAgent: public neb::DbStorageStep
+    class StepSendToDbAgent: public DbStorageStep, public neb::DynamicCreator<StepSendToDbAgent, std::shared_ptr<neb::SocketChannel>, MsgHead, neb::Mydis
+        , std::shared_ptr<SessionRedisNode>, int, const neb::CJsonObject*, std::string, const neb::CJsonObject*>
     {
     public:
         /**
@@ -33,11 +34,11 @@ namespace neb {
             int iRelative = RELATIVE_TABLE, const neb::CJsonObject* pTableField = NULL, const std::string& strKeyField = "", const neb::CJsonObject* pJoinField = NULL);
         virtual ~StepSendToDbAgent();
 
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        //virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL);
+        virtual neb::E_CMD_STATUS Callback(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const MsgBody& oInMsgBody, void* data = NULL);
 
-        virtual E_CMD_STATUS Callback(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const MsgBody& oInMsgBody, void* data = NULL);
-
-        virtual E_CMD_STATUS Timeout();
+        virtual neb::E_CMD_STATUS Timeout();
 
     protected:
         void WriteBackToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Result& oRsp);

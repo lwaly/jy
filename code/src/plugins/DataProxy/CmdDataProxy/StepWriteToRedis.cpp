@@ -9,11 +9,11 @@
 ******************************************************************************/
 #include "StepWriteToRedis.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    StepWriteToRedis::StepWriteToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate,
-        std::shared_ptr<SessionRedisNode> pNodeSession, std::shared_ptr<Step> pNextStep)
-        : RedisStorageStep(pNextStep), m_pChannel(pChannel), m_oReqMsgHead(oInMsgHead), m_oRedisOperate(oRedisOperate),
+    StepWriteToRedis::StepWriteToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead & oInMsgHead, const neb::Mydis& oRedisOperate,
+        std::shared_ptr<SessionRedisNode> pNodeSession, std::shared_ptr<neb::Step> pNextStep)
+        : RedisStorageStep(nullptr), m_pChannel(pChannel), m_oReqMsgHead(oInMsgHead), m_oRedisOperate(oRedisOperate.redis_operate()),
         m_pNodeSession(pNodeSession), pStepSetTtl(NULL)
     {
     }
@@ -21,25 +21,28 @@ namespace neb {
     StepWriteToRedis::~StepWriteToRedis() {
     }
 
-    E_CMD_STATUS StepWriteToRedis::Emit(int iErrno, const std::string& strErrMsg, const std::string& strErrShow)
+    neb::E_CMD_STATUS StepWriteToRedis::Emit(int iErrno, const std::string& strErrMsg, void* data)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!m_pNodeSession) {
+            LOG4_ERROR("%s()", __FUNCTION__);
             return (neb::CMD_STATUS_FAULT);
         }
 
         bool bGetRedisNode;
+        LOG4_TRACE("%s()", __FUNCTION__);
         if (m_oRedisOperate.hash_key().size() > 0) {
             bGetRedisNode = m_pNodeSession->GetRedisNode(m_oRedisOperate.hash_key(), m_strMasterNode, m_strSlaveNode);
         } else {
             bGetRedisNode = m_pNodeSession->GetRedisNode(m_oRedisOperate.key_name(), m_strMasterNode, m_strSlaveNode);
         }
+
         if (!bGetRedisNode) {
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
             return (neb::CMD_STATUS_FAULT);
         }
 
-        LOG4_DEBUG("%s", m_oRedisOperate.DebugString().c_str());
+        LOG4_DEBUG("%s \"%s\"", m_oRedisOperate.DebugString().c_str(), m_strMasterNode.c_str());
         SetCmd(m_oRedisOperate.redis_cmd_write());
         Append(m_oRedisOperate.key_name());
         for (int i = 0; i < m_oRedisOperate.fields_size(); ++i) {
@@ -53,35 +56,35 @@ namespace neb {
         if (SendTo(m_strMasterNode)) {
             return (neb::CMD_STATUS_RUNNING);
         }
-        Response(m_pChannel, m_oReqMsgHead, ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
+        Response(m_pChannel, m_oReqMsgHead, neb::ERR_REGISTERCALLBACK_REDIS, "RegisterCallback(RedisStep) error!");
         LOG4_ERROR("RegisterCallback(%s, StepWriteToRedis) error!", m_strMasterNode.c_str());
 
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepWriteToRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply) {
+    neb::E_CMD_STATUS StepWriteToRedis::Callback(const redisAsyncContext* c, int status, redisReply* pReply) {
         LOG4_TRACE("%s()", __FUNCTION__);
         char szErrMsg[256] = {0};
         if (REDIS_OK != status) {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s cmd status %d!", m_strMasterNode.c_str(), status);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         if (NULL == pReply) {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strMasterNode.c_str(), c->err, c->errstr);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
         LOG4_TRACE("redis reply->type = %d", pReply->type);
         if (REDIS_REPLY_ERROR == pReply->type) {
             snprintf(szErrMsg, sizeof(szErrMsg), "redis %s error %d: %s!", m_strMasterNode.c_str(), pReply->type, pReply->str);
-            Response(m_pChannel, m_oReqMsgHead, ERR_REDIS_CMD, szErrMsg);
+            Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_CMD, szErrMsg);
             return (neb::CMD_STATUS_FAULT);
         }
 
         // 从redis中读到数据
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         // 字符串类型的set命令的返回值的类型是REDIS_REPLY_STATUS，然后只有当返回信息是"OK"时，才表示该命令执行成功。
@@ -103,9 +106,9 @@ namespace neb {
         } else if (REDIS_REPLY_ARRAY == pReply->type) {
             LOG4_TRACE("pReply->type = %d, pReply->elements = %u", pReply->type, pReply->elements);
             if (0 == pReply->elements) {
-                Response(m_pChannel, m_oReqMsgHead, ERR_OK, "OK");        // 操作是正常的，但结果集为空
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_OK, "OK");        // 操作是正常的，但结果集为空
             }
-            if (neb::REDIS_T_HASH == m_oRedisOperate.redis_structure()) {
+            if (REDIS_T_HASH == m_oRedisOperate.redis_structure()) {
                 ReadReplyArrayForHashWithoutDataSet(pReply);
             } else {
                 ReadReplyArrayWithoutDataSet(pReply);
@@ -122,14 +125,14 @@ namespace neb {
 
         // 设置过期时间
         if (m_oRedisOperate.key_ttl() != 0) {
-            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("dataproxy::StepSetTtl",m_strMasterNode,
+            pStepSetTtl = std::dynamic_pointer_cast<StepSetTtl>(MakeSharedStep("DataProxy::StepSetTtl",m_strMasterNode,
                 m_oRedisOperate.key_name(), m_oRedisOperate.key_ttl()));
             if (NULL == pStepSetTtl) {
                 LOG4_ERROR("malloc space for StepSetTtl error!");
                 return (neb::CMD_STATUS_FAULT);
             }
             //Pretreat(pStepSetTtl);
-            pStepSetTtl->Emit(ERR_OK);
+            pStepSetTtl->Emit(neb::ERR_OK);
         }
         return (neb::CMD_STATUS_COMPLETED);
     }
@@ -139,7 +142,7 @@ namespace neb {
         char szErrMsg[256] = {0};
         char szValue[32] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         oRsp.set_total_count(1);
@@ -160,12 +163,12 @@ namespace neb {
             } else {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!", pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
 
             if (iDataLen > 1000000) { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hash result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hash result set exceed 1 MB!");
                 return (false);
             }
         }
@@ -182,14 +185,14 @@ namespace neb {
         char szErrMsg[256] = {0};
         char szValue[32] = {0};
         neb::Result oRsp;
-        oRsp.set_err_no(ERR_OK);
+        oRsp.set_err_no(neb::ERR_OK);
         oRsp.set_err_msg("OK");
         oRsp.set_from(neb::Result::FROM_REDIS);
         oRsp.set_total_count(pReply->elements);
         int iDataLen = oRsp.ByteSize();
         for (size_t i = 0; i < pReply->elements; ++i) {
             if (pReply->element[i]->len > 1000000) { // pb 最大限制
-                Response(m_pChannel, m_oReqMsgHead, ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_RESULTSET_EXCEED, "hgetall result set exceed 1 MB!");
                 return (false);
             }
             if (iDataLen + pReply->element[i]->len > 1000000) { // pb 最大限制
@@ -216,7 +219,7 @@ namespace neb {
             } else {
                 LOG4_ERROR("pReply->element[%d]->type = %d", i, pReply->element[i]->type);
                 snprintf(szErrMsg, sizeof(szErrMsg), "unexprected redis reply type %d and element[%d] type %d: %s!", pReply->type, i, pReply->element[i]->type, pReply->element[i]->str);
-                Response(m_pChannel, m_oReqMsgHead, ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_UNEXPECTED_REDIS_REPLY, szErrMsg);
                 return (false);
             }
         }

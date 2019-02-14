@@ -15,18 +15,20 @@
 #include "StepSendToDbAgent.hpp"
 #include "StepWriteToRedis.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepReadFromRedisForWrite: public RedisStorageStep {
+    class StepReadFromRedisForWrite: public RedisStorageStep, public neb::DynamicCreator<StepReadFromRedisForWrite, std::shared_ptr<neb::SocketChannel>, MsgHead,
+        neb::Mydis, std::shared_ptr<SessionRedisNode>, neb::CJsonObject, std::string>
+    {
     public:
         StepReadFromRedisForWrite(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate,
-            SessionRedisNode* pNodeSession, const neb::CJsonObject& oTableFields, const std::string& strKeyField = "");
+            std::shared_ptr<SessionRedisNode> pNodeSession, const neb::CJsonObject& oTableFields, const std::string& strKeyField = "");
         virtual ~StepReadFromRedisForWrite();
-
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
-        virtual E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL);
+        //virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        virtual neb::E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
     protected:
-        E_CMD_STATUS ExecUpdate(bool bDbOnly = false);
+        neb::E_CMD_STATUS ExecUpdate(bool bDbOnly = false);
 
     private:
         std::shared_ptr<neb::SocketChannel> m_pChannel;
@@ -38,9 +40,9 @@ namespace neb {
         std::string m_strSlaveNode;
 
     public:
-        SessionRedisNode* m_pRedisNodeSession;
-        StepSendToDbAgent* pStepSendToDbAgent;
-        StepWriteToRedis* pStepWriteToRedis;
+        std::shared_ptr<SessionRedisNode> m_pRedisNodeSession;
+        std::shared_ptr<StepSendToDbAgent> pStepSendToDbAgent;
+        std::shared_ptr<StepWriteToRedis> pStepWriteToRedis;
     };
 
 } /* namespace neb */

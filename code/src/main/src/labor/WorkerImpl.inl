@@ -31,9 +31,12 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep(Actor* pCreator, const std::str
     Step* pStep = dynamic_cast<Step*>(ActorFactory<Targs...>::Instance()->Create(strStepName, std::forward<Targs>(args)...));
     if (nullptr == pStep)
     {
-        LOG4_ERROR("failed to make shared step \"%s\"", strStepName.c_str());
+        std::string strRes;
+        ActorFactory<Targs...>::Instance()->Print(strRes);
+        LOG4_ERROR("failed to make shared step \"%s\"\"%s\"", strStepName.c_str(), strRes.c_str());
         return(nullptr);
     }
+
     StepModel* pStepAlias = (StepModel*)pStep;
     pStepAlias->m_dTimeout = (0 == pStepAlias->m_dTimeout) ? m_stWorkerInfo.dStepTimeout : pStepAlias->m_dTimeout;
     LOG4_TRACE("%s(StepName \"%s\", Step* 0x%X, lifetime %lf)", __FUNCTION__, strStepName.c_str(), pStepAlias, pStepAlias->m_dTimeout);

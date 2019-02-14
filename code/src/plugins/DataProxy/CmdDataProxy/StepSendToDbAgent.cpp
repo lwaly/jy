@@ -9,7 +9,7 @@
 ******************************************************************************/
 #include "StepSendToDbAgent.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     StepSendToDbAgent::StepSendToDbAgent(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate,
         std::shared_ptr<SessionRedisNode> pNodeSession, int iRelative, const neb::CJsonObject* pTableField, const std::string& strKeyField, const neb::CJsonObject* pJoinField)
@@ -22,7 +22,7 @@ namespace neb {
     {
     }
 
-    E_CMD_STATUS StepSendToDbAgent::Emit(int iErrno, const std::string& strErrMsg, const std::string& strErrShow)
+    neb::E_CMD_STATUS StepSendToDbAgent::Emit(int iErrno, const std::string& strErrMsg, void* data)
     {
         MsgHead oOutMsgHead;
         MsgBody oOutMsgBody;
@@ -68,26 +68,26 @@ namespace neb {
 
         if (m_oMemOperate.db_operate().SELECT == m_oMemOperate.db_operate().query_type())
         {
-            if (!SendPolling("DBAGENT_R", CMD_REQ_STORATE, GetSequence(), oOutMsgBody))
+            if (!SendPolling("DBAGENT_R", neb::CMD_REQ_STORATE, GetSequence(), oOutMsgBody))
             {
                 LOG4_ERROR("SendToNext(\"DBAGENT_R\") error!");
-                Response(m_pChannel, m_oReqMsgHead, ERR_DATA_TRANSFER, "SendToNext(\"DBAGENT_R\") error!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_DATA_TRANSFER, "SendToNext(\"DBAGENT_R\") error!");
                 return (neb::CMD_STATUS_FAULT);
             }
         }
         else
         {
-            if (!SendPolling("DBAGENT_W", CMD_REQ_STORATE, GetSequence(), oOutMsgBody))
+            if (!SendPolling("DBAGENT_W", neb::CMD_REQ_STORATE, GetSequence(), oOutMsgBody))
             {
                 LOG4_ERROR("SendToNext(\"DBAGENT_W\") error!");
-                Response(m_pChannel, m_oReqMsgHead, ERR_DATA_TRANSFER, "SendToNext(\"DBAGENT_W\") error!");
+                Response(m_pChannel, m_oReqMsgHead, neb::ERR_DATA_TRANSFER, "SendToNext(\"DBAGENT_W\") error!");
                 return (neb::CMD_STATUS_FAULT);
             }
         }
         return (neb::CMD_STATUS_RUNNING);
     }
 
-    E_CMD_STATUS StepSendToDbAgent::Callback(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const MsgBody& oInMsgBody, void* data)
+    neb::E_CMD_STATUS StepSendToDbAgent::Callback(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const MsgBody& oInMsgBody, void* data)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         MsgHead oOutMsgHead = m_oReqMsgHead;
@@ -155,7 +155,7 @@ namespace neb {
         }
         else
         { // 无需回复请求方
-            if (ERR_OK != oRsp.err_no())
+            if (neb::ERR_OK != oRsp.err_no())
             {
                 LOG4_ERROR("%d: %s", oRsp.err_no(), oRsp.err_msg().c_str());
             }
@@ -168,17 +168,17 @@ namespace neb {
         return (neb::CMD_STATUS_RUNNING);
     }
 
-    E_CMD_STATUS StepSendToDbAgent::Timeout()
+    neb::E_CMD_STATUS StepSendToDbAgent::Timeout()
     {
-        Response(m_pChannel, m_oReqMsgHead, ERR_TIMEOUT, "read from db or write to db timeout!");
+        Response(m_pChannel, m_oReqMsgHead, neb::ERR_TIMEOUT, "read from db or write to db timeout!");
         return (neb::CMD_STATUS_FAULT);
     }
 
     void StepSendToDbAgent::WriteBackToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Result& oRsp)
     {
-        if (m_oMemOperate.has_redis_operate() && (neb::Mydis::RedisOperate::T_READ == m_oMemOperate.redis_operate().op_type()) && (ERR_OK == oRsp.err_no()))
+        if (m_oMemOperate.has_redis_operate() && (neb::Mydis::RedisOperate::T_READ == m_oMemOperate.redis_operate().op_type()) && (neb::ERR_OK == oRsp.err_no()))
         {
-            pStepWriteBackToRedis = std::dynamic_pointer_cast<StepWriteBackToRedis>(MakeSharedStep("dataproxy::StepWriteBackToRedis",pChannel,
+            pStepWriteBackToRedis = std::dynamic_pointer_cast<StepWriteBackToRedis>(MakeSharedStep("DataProxy::StepWriteBackToRedis",pChannel,
                 oInMsgHead, m_oMemOperate, m_pNodeSession, m_iRelative, m_strKeyField, &m_oJoinField));
             if (NULL == pStepWriteBackToRedis)
             {

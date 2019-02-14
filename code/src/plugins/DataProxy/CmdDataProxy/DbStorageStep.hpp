@@ -15,7 +15,7 @@
 #include "pb/mydis.pb.h"
 #include "SessionRedisNode.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     class DbStorageStep: public neb::PbStep
     {

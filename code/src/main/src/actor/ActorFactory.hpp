@@ -35,7 +35,14 @@ public:
 
     bool Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc);
     Actor* Create(const std::string& strTypeName, Targs&&... args);
-
+    void Print(std::string& strRes)
+    {
+        strRes = "";
+        for (auto iter = m_mapCreateFunction.begin(); iter != m_mapCreateFunction.end(); iter++)
+        {
+            strRes += iter->first;
+        }
+    }
 private:
     ActorFactory(){};
     static ActorFactory<Targs...>* m_pActorFactory;

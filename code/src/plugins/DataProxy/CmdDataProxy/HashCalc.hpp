@@ -6,18 +6,12 @@
 #include <stdint.h>
 #include <string>
 
-namespace loss
+namespace DataProxy
 {
-
-
-uint32_t CalcKeyHash(const char *key,unsigned int key_length);  // hash_fnv1a_64
-
-uint32_t hash_fnv1_64(const char *key, size_t key_length);
-
-uint32_t hash_fnv1a_64(const char *key, size_t key_length);
-
-uint32_t murmur3_32(const char *key, size_t key_length, uint32_t seed);
-
+    uint32_t CalcKeyHash(const char *key,unsigned int key_length);  // hash_fnv1a_64
+    uint32_t hash_fnv1_64(const char *key, size_t key_length);
+    uint32_t hash_fnv1a_64(const char *key, size_t key_length);
+    uint32_t murmur3_32(const char *key, size_t key_length, uint32_t seed);
 }
 
 #endif

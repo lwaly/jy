@@ -12,16 +12,17 @@
 
 #include "RedisStorageStep.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepSetTtl: public RedisStorageStep {
+    class StepSetTtl: public RedisStorageStep, public neb::DynamicCreator<StepSetTtl, std::string, std::string, int32>
+    {
     public:
         StepSetTtl(const std::string& strMasterNodeIdentify, const std::string& strKey, int32 iExpireSeconds);
         virtual ~StepSetTtl();
 
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
-
-        virtual E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
+        //virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL);
+        virtual neb::E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
 
     private:
         std::string m_strMasterNodeIdentify;

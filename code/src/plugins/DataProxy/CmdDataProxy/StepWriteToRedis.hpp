@@ -13,17 +13,19 @@
 #include "RedisStorageStep.hpp"
 #include "StepSetTtl.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepWriteToRedis: public RedisStorageStep {
+    class StepWriteToRedis: public RedisStorageStep, public neb::DynamicCreator<StepWriteToRedis, std::shared_ptr<neb::SocketChannel>, MsgHead, neb::Mydis,
+        std::shared_ptr<DataProxy::SessionRedisNode>, std::shared_ptr<neb::Step>>
+    {
     public:
-        StepWriteToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate,
-            std::shared_ptr<SessionRedisNode> pNodeSession = nullptr, std::shared_ptr<Step> pNextStep = nullptr);
+        StepWriteToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead & oInMsgHead, const neb::Mydis &oRedisOperate,
+            std::shared_ptr<SessionRedisNode> pNodeSession, std::shared_ptr<neb::Step> pNextStep = nullptr);
         virtual ~StepWriteToRedis();
 
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
-
-        virtual E_CMD_STATUS Callback( const redisAsyncContext* c, int status, redisReply* pReply);
+        //virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "");
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL);
+        virtual neb::E_CMD_STATUS Callback( const redisAsyncContext* c, int status, redisReply* pReply);
 
     protected:
         bool ReadReplyArrayForHashWithoutDataSet(redisReply* pReply);

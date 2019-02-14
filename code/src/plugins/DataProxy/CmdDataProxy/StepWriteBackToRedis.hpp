@@ -12,22 +12,29 @@
 
 #include "RedisStorageStep.hpp"
 #include "StepSetTtl.hpp"
+#include "actor/DynamicCreator.hpp"
 
-namespace neb {
+namespace DataProxy {
 
-    class StepWriteBackToRedis: public RedisStorageStep {
+    class StepWriteBackToRedis: public RedisStorageStep, public neb::DynamicCreator<StepWriteBackToRedis, std::shared_ptr<neb::SocketChannel>, MsgHead, neb::Mydis,
+        std::shared_ptr<SessionRedisNode>, int, const std::string, const neb::CJsonObject*>
+    {
     public:
         StepWriteBackToRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis& oMemOperate,
             std::shared_ptr<SessionRedisNode> pNodeSession, int iRelative = RELATIVE_TABLE, const std::string& strKeyField = "", const neb::CJsonObject* pJoinField = NULL);
         virtual ~StepWriteBackToRedis();
 
-        virtual E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "") {
+        //         virtual neb::E_CMD_STATUS Emit(int iErrno, const std::string& strErrMsg = "", const std::string& strErrShow = "") {
+        //             return (neb::CMD_STATUS_COMPLETED);
+        //         }
+
+        virtual neb::E_CMD_STATUS Emit(int iErrno = 0, const std::string& strErrMsg = "",  void* data = NULL) {
             return (neb::CMD_STATUS_COMPLETED);
         }
 
-        virtual E_CMD_STATUS Emit(const neb::Result& oRsp);
+        virtual neb::E_CMD_STATUS Emit(const neb::Result& oRsp);
 
-        virtual E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
+        virtual neb::E_CMD_STATUS Callback(const redisAsyncContext* c, int status, redisReply* pReply);
 
     protected:
         bool MakeCmdWithJoin(const neb::Result& oRsp);

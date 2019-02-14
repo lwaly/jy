@@ -9,7 +9,7 @@
 ******************************************************************************/
 #include "StepSetTtl.hpp"
 
-namespace neb {
+namespace DataProxy {
 
     StepSetTtl::StepSetTtl(const std::string& strMasterNodeIdentify, const std::string& strKey, int32 iExpireSeconds)
         : m_strMasterNodeIdentify(strMasterNodeIdentify), m_strKey(strKey), m_iExpireSeconds(iExpireSeconds)
@@ -20,7 +20,7 @@ namespace neb {
     {
     }
 
-    E_CMD_STATUS StepSetTtl::Emit(int iErrno, const std::string& strErrMsg, const std::string& strErrShow)
+    neb::E_CMD_STATUS StepSetTtl::Emit(int iErrno, const std::string& strErrMsg, void* data)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
 
@@ -37,7 +37,7 @@ namespace neb {
         return (neb::CMD_STATUS_FAULT);
     }
 
-    E_CMD_STATUS StepSetTtl::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
+    neb::E_CMD_STATUS StepSetTtl::Callback(const redisAsyncContext* c, int status, redisReply* pReply)
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (REDIS_OK != status)
