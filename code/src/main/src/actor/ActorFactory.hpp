@@ -61,7 +61,7 @@ bool ActorFactory<Targs...>::Regist(const std::string& strTypeName, std::functio
         return (false);
     }
     bool bReg = m_mapCreateFunction.insert(
-                    std::make_pair(strTypeName, pFunc)).second;
+        std::make_pair(strTypeName, pFunc)).second;
     return (bReg);
 }
 
@@ -79,6 +79,45 @@ Actor* ActorFactory<Targs...>::Create(const std::string& strTypeName, Targs&&...
     }
 }
 
+template<typename T, typename ...Targs>
+class ActorFactory1
+{
+public:
+    static ActorFactory1* Instance()
+    {
+        if (nullptr == m_pActorFactory)
+        {
+            m_pActorFactory = new ActorFactory1();
+        }
+        return(m_pActorFactory);
+    }
+
+    virtual ~ActorFactory1(){};
+
+    Actor* Create(const std::string& strTypeName, Targs&&... args);
+private:
+    ActorFactory1(){};
+    static ActorFactory1<T, Targs...>* m_pActorFactory;
+};
+
+
+template<typename T, typename ...Targs>
+ActorFactory1<T, Targs...>* ActorFactory1<T, Targs...>::m_pActorFactory = nullptr;
+
+template<typename T, typename ...Targs>
+Actor* ActorFactory1<T, Targs...>::Create(const std::string& strTypeName, Targs&&... args)
+{
+    T* pT = nullptr;
+    try
+    {
+        pT = new T(std::forward<Targs>(args)...);
+    }
+    catch(std::bad_alloc& e)
+    {
+        return(nullptr);
+    }
+    return(pT);
+}
 
 } /* namespace neb */
 

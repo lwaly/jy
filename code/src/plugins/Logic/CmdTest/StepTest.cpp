@@ -27,11 +27,11 @@ namespace logic
         LOG4_TRACE("%s", __FUNCTION__);
         std::string strDProxyBuffer;
         char szRedisKey[64] = { 0 };
-        snprintf(szRedisKey, sizeof(szRedisKey), "%u:%u", 1, 1001);
+        snprintf(szRedisKey, sizeof(szRedisKey), "%u:%u", 1, 1002);
 
-        neb::RedisOperator oMemOper(1000, szRedisKey, "hset");
-        oMemOper.AddRedisField("test", "test");
-
+        neb::RedisOperator oMemOper(1000, szRedisKey, "hmset", "hmget");
+        oMemOper.AddRedisField("1");
+oMemOper.AddRedisField("2");
         MsgHead oMsgHead;
         MsgBody oMsgBody;
         oMsgBody.set_data(oMemOper.MakeMemOperate()->SerializeAsString());

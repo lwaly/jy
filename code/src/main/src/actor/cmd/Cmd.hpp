@@ -60,6 +60,7 @@ public:
 protected:
     template <typename ...Targs> void Logger(int iLogLevel, const char* szFileName, unsigned int uiFileLine, const char* szFunction, Targs... args);
     template <typename ...Targs> std::shared_ptr<Step> MakeSharedStep(const std::string& strStepName, Targs... args);
+    template <typename T, typename ...Targs> std::shared_ptr<Step> MakeSharedStep1(const std::string& strStepName, Targs... args);
     template <typename ...Targs> std::shared_ptr<Session> MakeSharedSession(const std::string& strSessionName, Targs... args);
     template <typename ...Targs> std::shared_ptr<Cmd> MakeSharedCmd(const std::string& strCmdName, Targs... args);
     template <typename ...Targs> std::shared_ptr<Module> MakeSharedModule(const std::string& strModuleName, Targs... args);
@@ -75,6 +76,12 @@ template <typename ...Targs>
 std::shared_ptr<Step> Cmd::MakeSharedStep(const std::string& strStepName, Targs... args)
 {
     return(m_pWorker->MakeSharedStep(this, strStepName, std::forward<Targs>(args)...));
+}
+
+template <typename T, typename ...Targs>
+std::shared_ptr<Step> Cmd::MakeSharedStep1(const std::string& strStepName, Targs... args)
+{
+    return(m_pWorker->MakeSharedStep1<T, Targs...>(this, strStepName, std::forward<Targs>(args)...));
 }
 
 template <typename ...Targs>

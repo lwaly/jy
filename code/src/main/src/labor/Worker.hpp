@@ -35,6 +35,9 @@ public:
     template <typename ...Targs>
     std::shared_ptr<Step> MakeSharedStep(Actor* pCreator, const std::string& strStepName, Targs... args);
 
+    template <typename T, typename ...Targs>
+    std::shared_ptr<Step> MakeSharedStep1(Actor* pCreator, const std::string& strStepName, Targs... args);
+
     template <typename ...Targs>
     std::shared_ptr<Session> MakeSharedSession(Actor* pCreator, const std::string& strSessionName, Targs... args);
 
@@ -97,6 +100,12 @@ template <typename ...Targs>
 std::shared_ptr<Step> Worker::MakeSharedStep(Actor* pCreator, const std::string& strStepName, Targs... args)
 {
     return(m_pImpl->MakeSharedStep(pCreator, strStepName, std::forward<Targs>(args)...));
+}
+
+template <typename T, typename ...Targs>
+std::shared_ptr<Step> Worker::MakeSharedStep1(Actor* pCreator, const std::string& strStepName, Targs... args)
+{
+    return(m_pImpl->MakeSharedStep1<T, Targs...>(pCreator, strStepName, std::forward<Targs>(args)...));
 }
 
 template <typename ...Targs>

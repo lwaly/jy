@@ -14,8 +14,7 @@
 
 namespace DataProxy {
 
-    class StepReadFromRedis: public RedisStorageStep, public neb::DynamicCreator<StepReadFromRedis, std::shared_ptr<neb::SocketChannel>, MsgHead,
-        neb::Mydis::RedisOperate, std::shared_ptr<SessionRedisNode>, bool, const neb::CJsonObject*, std::string, std::shared_ptr<neb::Step>>
+    class StepReadFromRedis: public RedisStorageStep
     {
     public:
         StepReadFromRedis(std::shared_ptr<neb::SocketChannel> pChannel, const MsgHead& oInMsgHead, const neb::Mydis::RedisOperate& oRedisOperate,

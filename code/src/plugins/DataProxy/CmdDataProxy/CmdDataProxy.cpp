@@ -963,16 +963,18 @@ namespace DataProxy {
             char szRedisDataPurpose[16] = {0};
             snprintf(szRedisDataPurpose, 16, "%d", oMemOperate.redis_operate().data_purpose());
             if (m_oJsonTableRelative["relative"]("dataset") == m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("relative"))
-            {
-                m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",
+            {LOG4_DEBUG("%s()", __FUNCTION__);
+            m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep1<StepReadFromRedis, std::shared_ptr<neb::SocketChannel>, MsgHead, neb::Mydis::RedisOperate,
+                std::shared_ptr<SessionRedisNode>, bool, neb::CJsonObject*, std::string>
+                ("DataProxy::StepReadFromRedis",
                     pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, true,
                     &m_oJsonTableRelative["tables"][oMemOperate.db_operate().table_name()]["cols"],
                     m_oJsonTableRelative["redis_struct"][szRedisDataPurpose]("key_field")));
             }
             else
-            {
+            {LOG4_DEBUG("%s()", __FUNCTION__);
                 m_pStepReadFromRedis = std::dynamic_pointer_cast<StepReadFromRedis>(MakeSharedStep("DataProxy::StepReadFromRedis",
-                    pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, false,NULL,"", NULL));
+                    pChannel, oInMsgHead, oMemOperate.redis_operate(), m_pRedisNodeSession, false));
             }
             if (NULL == m_pStepReadFromRedis)
             {

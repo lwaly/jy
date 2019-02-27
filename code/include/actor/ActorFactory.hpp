@@ -18,7 +18,7 @@ namespace neb
 
 class Actor;
 
-template<typename ...Targs>
+template<typename T, typename ...Targs>
 class ActorFactory
 {
 public:
@@ -41,17 +41,17 @@ public:
     }
 private:
     ActorFactory(){};
-    static ActorFactory<Targs...>* m_pActorFactory;
+    static ActorFactory<typename T, Targs...>* m_pActorFactory;
     static string m_strRes;
     std::unordered_map<std::string, std::function<Actor*(Targs&&...)> > m_mapCreateFunction;
 };
 
 
-template<typename ...Targs>
-ActorFactory<Targs...>* ActorFactory<Targs...>::m_pActorFactory = nullptr;
+template<typename T, typename ...Targs>
+ActorFactory<typename T, Targs...>* ActorFactory<typename T, Targs...>::m_pActorFactory = nullptr;
 
-template<typename ...Targs>
-bool ActorFactory<Targs...>::Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc)
+template<typename T, typename ...Targs>
+bool ActorFactory<typename T, Targs...>::Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc)
 {
     m_strRes += strTypeName + "  ";
     if (nullptr == pFunc)
@@ -65,18 +65,29 @@ bool ActorFactory<Targs...>::Regist(const std::string& strTypeName, std::functio
     return (bReg);
 }
 
-template<typename ...Targs>
-Actor* ActorFactory<Targs...>::Create(const std::string& strTypeName, Targs&&... args)
+template<typename T, typename ...Targs>
+Actor* ActorFactory<typename T, Targs...>::Create(const std::string& strTypeName, Targs&&... args)
 {
-    auto iter = m_mapCreateFunction.find(strTypeName);
-    if (iter == m_mapCreateFunction.end())
+    T* pT = nullptr;
+    try
     {
-        return (nullptr);
+        pT = new T(std::forward<Targs>(args)...);
     }
-    else
+    catch(std::bad_alloc& e)
     {
-        return (iter->second(std::forward<Targs>(args)...));
+        //std::cerr << e.what() << std::endl;     // TODO write log
+        return(nullptr);
     }
+    return(pT);
+    //auto iter = m_mapCreateFunction.find(strTypeName);
+    //if (iter == m_mapCreateFunction.end())
+    //{
+    //    return (nullptr);
+    //}
+    //else
+    //{
+    //    return (iter->second(std::forward<Targs>(args)...));
+    //}
 }
 
 

@@ -38,7 +38,7 @@ public:
                 strTypeName = szDemangleName;
                 free(szDemangleName);
             }
-            ActorFactory<Targs...>::Instance()->Regist(strTypeName, CreateObject);
+            //ActorFactory<Targs...>::Instance()->Regist(strTypeName, CreateObject);
         }
         inline void do_nothing()const { };
     };

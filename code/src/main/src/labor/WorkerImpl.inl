@@ -47,6 +47,83 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep(Actor* pCreator, const std::str
     {
         switch(pCreator->m_eActorType)
         {
+        case Actor::ACT_PB_STEP:
+        case Actor::ACT_HTTP_STEP:
+        case Actor::ACT_REDIS_STEP:
+        case Actor::ACT_CMD:
+        case Actor::ACT_MODULE:
+            pStepAlias->m_strTraceId = pCreator->m_strTraceId;
+            break;
+        case Actor::ACT_SESSION:
+        case Actor::ACT_TIMER:
+            {
+                std::ostringstream oss;
+                oss << m_stWorkerInfo.uiNodeId << "." << GetNowTime() << "." << pStepAlias->GetSequence();
+                pStepAlias->m_strTraceId = std::move(oss.str());
+            }
+            break;
+        default:
+            ;
+        }
+    }
+    ev_timer* timer_watcher = pStepAlias->MutableTimerWatcher();
+    if (NULL == timer_watcher)
+    {
+        delete pStep;
+        pStepAlias = pStep = nullptr;
+        return(nullptr);
+    }
+
+    for (auto iter = pStepAlias->m_setNextStepSeq.begin(); iter != pStepAlias->m_setNextStepSeq.end(); ++iter)
+    {
+        auto callback_iter = m_mapCallbackStep.find(*iter);
+        if (callback_iter != m_mapCallbackStep.end())
+        {
+            (std::dynamic_pointer_cast<StepModel>(callback_iter->second))->m_setPreStepSeq.insert(pStepAlias->GetSequence());
+        }
+    }
+
+    std::shared_ptr<Step> pSharedStep;
+    pSharedStep.reset(pStep);
+    auto ret = m_mapCallbackStep.insert(std::make_pair(pStepAlias->GetSequence(), pSharedStep));
+    if (ret.second)
+    {
+        if (gc_dNoTimeout != pStepAlias->m_dTimeout)
+        {
+            ev_timer_init (timer_watcher, StepTimeoutCallback, pStepAlias->m_dTimeout + ev_time() - ev_now(m_loop), 0.);
+            ev_timer_start (m_loop, timer_watcher);
+        }
+        LOG4_TRACE("Step(seq %u, active_time %lf, lifetime %lf) register successful.",
+            pStepAlias->GetSequence(), pStepAlias->GetActiveTime(), pStepAlias->GetTimeout());
+        return(pSharedStep);
+    }
+    else
+    {
+        pStepAlias = pStep = nullptr;
+        return(nullptr);
+    }
+}
+
+template <typename T, typename ...Targs>
+std::shared_ptr<Step> WorkerImpl::MakeSharedStep1(Actor* pCreator, const std::string& strStepName, Targs... args)
+{
+    Step* pStep = dynamic_cast<Step*>(ActorFactory1<T, Targs...>::Instance()->Create(strStepName, std::forward<Targs>(args)...));
+    if (nullptr == pStep)
+    {
+        LOG4_ERROR("failed to make shared step \"%s\"", strStepName.c_str());
+        return(nullptr);
+    }
+
+    StepModel* pStepAlias = (StepModel*)pStep;
+    pStepAlias->m_dTimeout = (0 == pStepAlias->m_dTimeout) ? m_stWorkerInfo.dStepTimeout : pStepAlias->m_dTimeout;
+    LOG4_TRACE("%s(StepName \"%s\", Step* 0x%X, lifetime %lf)", __FUNCTION__, strStepName.c_str(), pStepAlias, pStepAlias->m_dTimeout);
+
+    pStepAlias->SetWorker(m_pWorker);
+    pStepAlias->SetActiveTime(ev_now(m_loop));
+    if (nullptr != pCreator)
+    {
+        switch(pCreator->m_eActorType)
+        {
             case Actor::ACT_PB_STEP:
             case Actor::ACT_HTTP_STEP:
             case Actor::ACT_REDIS_STEP:

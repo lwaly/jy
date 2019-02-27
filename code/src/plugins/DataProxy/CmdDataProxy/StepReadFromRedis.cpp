@@ -28,7 +28,7 @@ namespace DataProxy {
     {
         LOG4_TRACE("%s()", __FUNCTION__);
         if (!m_pNodeSession)
-        {
+        {LOG4_TRACE("%s()", __FUNCTION__);
             return (neb::CMD_STATUS_FAULT);
         }
 
@@ -36,15 +36,15 @@ namespace DataProxy {
         {
             bool bGetRedisNode;
             if (m_oRedisOperate.hash_key().size() > 0)
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 bGetRedisNode = m_pNodeSession->GetRedisNode(m_oRedisOperate.hash_key(), m_strMasterNode, m_strSlaveNode);
             }
             else
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 bGetRedisNode = m_pNodeSession->GetRedisNode(m_oRedisOperate.key_name(), m_strMasterNode, m_strSlaveNode);
             }
             if (!bGetRedisNode)
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NODE_NOT_FOUND, "redis node not found!");
                 return (neb::CMD_STATUS_FAULT);
             }
@@ -55,27 +55,27 @@ namespace DataProxy {
         for (int i = 0; i < m_oRedisOperate.fields_size(); ++i)
         {
             if (m_oRedisOperate.fields(i).col_name().size() > 0)
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 Append(m_oRedisOperate.fields(i).col_name());
             }
             if (m_oRedisOperate.fields(i).col_value().size() > 0)
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 Append(m_oRedisOperate.fields(i).col_value());
             }
         }
 
         if (0 == m_iReadNum)
         { // 从备Redis节点读取
-            //if (RegisterCallback(m_strSlaveNode, this))
-            {
+            if (SendTo(m_strSlaveNode))
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 ++m_iReadNum;
                 return (neb::CMD_STATUS_RUNNING);
             }
         }
         else
         { // 从主Redis节点读取（说明第一次从备Redis节点读取失败）
-            //if (RegisterCallback(m_strMasterNode, this))
-            {
+            if (SendTo(m_strMasterNode))
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 ++m_iReadNum;
                 return (neb::CMD_STATUS_RUNNING);
             }
@@ -145,7 +145,7 @@ namespace DataProxy {
         if (REDIS_REPLY_STRING == pReply->type)
         {
             if (m_bIsDataSet)
-            {
+            {LOG4_TRACE("%s()", __FUNCTION__);
                 neb::Record* pRecord = oRsp.add_record_data();
                 if (!pRecord->ParseFromArray(pReply->str, pReply->len))
                 { // 解析出错表明redis中数据有问题，需从db中读并覆盖redis中数据
@@ -158,6 +158,8 @@ namespace DataProxy {
                         }
                         return (neb::CMD_STATUS_COMPLETED);
                     }
+                    std::string str(pReply->str, pReply->len);
+                    LOG4_TRACE("%s() %s %d", __FUNCTION__,str.c_str(),pReply->len);
                     Response(m_pChannel, m_oReqMsgHead, neb::ERR_REDIS_NIL_AND_DB_FAILED, "pRecord->ParseFromArray(pReply->element[i]->str, pReply->element[i]->len) failed!");
                     return (neb::CMD_STATUS_FAULT);
                 }
@@ -178,6 +180,7 @@ namespace DataProxy {
             }
             else
             {
+                LOG4_TRACE("%s()", __FUNCTION__);
                 neb::Record* pRecord = oRsp.add_record_data();
                 neb::Field* pField = pRecord->add_field_info();
                 pField->set_col_value(pReply->str, pReply->len);
