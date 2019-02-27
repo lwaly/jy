@@ -31,9 +31,7 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep(Actor* pCreator, const std::str
     Step* pStep = dynamic_cast<Step*>(ActorFactory<Targs...>::Instance()->Create(strStepName, std::forward<Targs>(args)...));
     if (nullptr == pStep)
     {
-        std::string strRes;
-        ActorFactory<Targs...>::Instance()->Print(strRes);
-        LOG4_ERROR("failed to make shared step \"%s\"\"%s\"", strStepName.c_str(), strRes.c_str());
+        LOG4_ERROR("failed to make shared step \"%s\"", strStepName.c_str());
         return(nullptr);
     }
 
@@ -45,6 +43,7 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep(Actor* pCreator, const std::str
     pStepAlias->SetActiveTime(ev_now(m_loop));
     if (nullptr != pCreator)
     {
+        pStepAlias->SetContext(pCreator->GetContext());
         switch(pCreator->m_eActorType)
         {
         case Actor::ACT_PB_STEP:
@@ -113,7 +112,6 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep1(Actor* pCreator, const std::st
         LOG4_ERROR("failed to make shared step \"%s\"", strStepName.c_str());
         return(nullptr);
     }
-
     StepModel* pStepAlias = (StepModel*)pStep;
     pStepAlias->m_dTimeout = (0 == pStepAlias->m_dTimeout) ? m_stWorkerInfo.dStepTimeout : pStepAlias->m_dTimeout;
     LOG4_TRACE("%s(StepName \"%s\", Step* 0x%X, lifetime %lf)", __FUNCTION__, strStepName.c_str(), pStepAlias, pStepAlias->m_dTimeout);
@@ -122,6 +120,7 @@ std::shared_ptr<Step> WorkerImpl::MakeSharedStep1(Actor* pCreator, const std::st
     pStepAlias->SetActiveTime(ev_now(m_loop));
     if (nullptr != pCreator)
     {
+        pStepAlias->SetContext(pCreator->GetContext());
         switch(pCreator->m_eActorType)
         {
             case Actor::ACT_PB_STEP:
@@ -195,6 +194,10 @@ std::shared_ptr<Session> WorkerImpl::MakeSharedSession(Actor* pCreator, const st
 
     pSessionAlias->SetWorker(m_pWorker);
     pSessionAlias->SetActiveTime(ev_now(m_loop));
+    if (nullptr != pCreator)
+    {
+        pSessionAlias->SetContext(pCreator->GetContext());
+    }
     ev_timer* timer_watcher = pSessionAlias->MutableTimerWatcher();
     if (NULL == timer_watcher)
     {
@@ -239,6 +242,10 @@ std::shared_ptr<Cmd> WorkerImpl::MakeSharedCmd(Actor* pCreator, const std::strin
 
     pCmdAlias->SetWorker(m_pWorker);
     pCmdAlias->SetActiveTime(ev_now(m_loop));
+    if (nullptr != pCreator)
+    {
+        pCmdAlias->SetContext(pCreator->GetContext());
+    }
 
     std::shared_ptr<Cmd> pSharedCmd;
     pSharedCmd.reset(pCmd);
@@ -268,6 +275,10 @@ std::shared_ptr<Module> WorkerImpl::MakeSharedModule(Actor* pCreator, const std:
 
     pModuleAlias->SetWorker(m_pWorker);
     pModuleAlias->SetActiveTime(ev_now(m_loop));
+    if (nullptr != pCreator)
+    {
+        pModuleAlias->SetContext(pCreator->GetContext());
+    }
 
     std::shared_ptr<Module> pSharedModule;
     pSharedModule.reset(pModule);

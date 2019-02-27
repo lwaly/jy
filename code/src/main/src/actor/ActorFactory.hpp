@@ -10,6 +10,7 @@
 #ifndef SRC_ACTOR_ACTORFACTORY_HPP_
 #define SRC_ACTOR_ACTORFACTORY_HPP_
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 
@@ -35,14 +36,7 @@ public:
 
     bool Regist(const std::string& strTypeName, std::function<Actor*(Targs&&... args)> pFunc);
     Actor* Create(const std::string& strTypeName, Targs&&... args);
-    void Print(std::string& strRes)
-    {
-        strRes = "";
-        for (auto iter = m_mapCreateFunction.begin(); iter != m_mapCreateFunction.end(); iter++)
-        {
-            strRes += iter->first;
-        }
-    }
+
 private:
     ActorFactory(){};
     static ActorFactory<Targs...>* m_pActorFactory;
@@ -61,7 +55,7 @@ bool ActorFactory<Targs...>::Regist(const std::string& strTypeName, std::functio
         return (false);
     }
     bool bReg = m_mapCreateFunction.insert(
-        std::make_pair(strTypeName, pFunc)).second;
+                    std::make_pair(strTypeName, pFunc)).second;
     return (bReg);
 }
 
